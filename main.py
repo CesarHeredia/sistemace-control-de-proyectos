@@ -1,4 +1,8 @@
+# pyrefly: ignore [missing-import]
 import customtkinter as ctk
+import sqlite3
+from tkinter import filedialog, messagebox
+from PIL import Image
 
 # Configuración básica de customtkinter
 ctk.set_appearance_mode("Light")
@@ -28,7 +32,7 @@ class App(ctk.CTk):
         self.subtitle_label.grid(row=1, column=0, padx=20, pady=(0, 40), sticky="w")
 
         # Opciones del Menú
-        self.btn_estudiantes = ctk.CTkButton(self.sidebar_frame, text="👥  Estudiantes", fg_color="#374151", text_color="white", anchor="w", height=45, font=ctk.CTkFont(size=14, weight="bold"), corner_radius=8)
+        self.btn_estudiantes = ctk.CTkButton(self.sidebar_frame, text="👥  Estudiantes", fg_color="#374151", text_color="white", anchor="w", height=45, font=ctk.CTkFont(size=14, weight="bold"), corner_radius=8, command=self.show_student_list)
         self.btn_estudiantes.grid(row=2, column=0, padx=15, pady=5, sticky="ew")
 
         self.btn_calificaciones = ctk.CTkButton(self.sidebar_frame, text="📖  Calificaciones", fg_color="transparent", text_color="#A0AEC0", anchor="w", height=45, hover_color="#1F2937", font=ctk.CTkFont(size=14))
@@ -46,10 +50,23 @@ class App(ctk.CTk):
         self.footer_label2 = ctk.CTkLabel(self.sidebar_frame, text="© 2026", font=ctk.CTkFont(size=12), text_color="#A0AEC0")
         self.footer_label2.grid(row=7, column=0, padx=20, pady=(0, 30), sticky="w")
 
-
-        # --- Contenido Principal ---
+        # --- Contenedor Principal Dinamico ---
         self.main_frame = ctk.CTkFrame(self, fg_color="transparent")
         self.main_frame.grid(row=0, column=1, padx=40, pady=30, sticky="nsew")
+        self.main_frame.grid_rowconfigure(2, weight=1)
+        self.main_frame.grid_columnconfigure(0, weight=1)
+
+        # Cargar vista por defecto
+        self.show_student_list()
+
+    def clear_main_frame(self):
+        for widget in self.main_frame.winfo_children():
+            widget.destroy()
+        # Resetear pesos del grid
+        self.main_frame.grid_rowconfigure((0,1,2,3), weight=0)
+
+    def show_student_list(self):
+        self.clear_main_frame()
         self.main_frame.grid_rowconfigure(2, weight=1)
         self.main_frame.grid_columnconfigure(0, weight=1)
 
@@ -63,7 +80,7 @@ class App(ctk.CTk):
         self.subtitle_main_label = ctk.CTkLabel(self.header_frame, text="Administra los datos de los estudiantes", font=ctk.CTkFont(size=15), text_color="#718096")
         self.subtitle_main_label.grid(row=1, column=0, sticky="w")
 
-        self.btn_nuevo = ctk.CTkButton(self.header_frame, text="+ Nuevo Estudiante", fg_color="#0B0F19", text_color="white", font=ctk.CTkFont(weight="bold", size=14), corner_radius=8, height=45, hover_color="#1F2937", command=self.open_new_student_window)
+        self.btn_nuevo = ctk.CTkButton(self.header_frame, text="+ Nuevo Estudiante", fg_color="#0B0F19", text_color="white", font=ctk.CTkFont(weight="bold", size=14), corner_radius=8, height=45, hover_color="#1F2937", command=self.show_new_student_form)
         self.btn_nuevo.grid(row=0, column=1, rowspan=2, sticky="e")
 
         # Buscador y Filtro
@@ -92,14 +109,32 @@ class App(ctk.CTk):
             lbl = ctk.CTkLabel(header_bg, text=h, font=ctk.CTkFont(weight="bold", size=14), text_color="#4A5568")
             lbl.place(relx=0.5 if i==3 else 0.15, rely=0.5, anchor="center" if i==3 else "w")
 
-        # Lista vacía para los estudiantes (se pueden cargar desde una base de datos más adelante)
-        estudiantes = []
+        self.cargar_estudiantes()
 
-        # Llenar las filas de la tabla
+    def cargar_estudiantes(self):
+        # Limpiar la tabla antes de recargar, manteniendo solo la primera fila (los encabezados)
+        if not hasattr(self, 'table_frame') or not self.table_frame.winfo_exists():
+            return
+            
+        for widget in self.table_frame.winfo_children():
+            if int(widget.grid_info().get("row", 0)) > 0:
+                widget.destroy()
+                
+        try:
+            conn = sqlite3.connect('notas.db')
+            cursor = conn.cursor()
+            cursor.execute('SELECT id, cedula, primer_nombre, primer_apellido FROM estudiantes')
+            estudiantes = cursor.fetchall()
+            conn.close()
+        except Exception as e:
+            print("Error al cargar:", e)
+            estudiantes = []
+
         for row, data in enumerate(estudiantes, start=1):
+            nombre_completo = f"{data[2]} {data[3]}"
             ctk.CTkLabel(self.table_frame, text=str(data[0]), text_color="#1A202C", anchor="w", font=ctk.CTkFont(size=13)).grid(row=row, column=0, padx=15, pady=15, sticky="ew")
             ctk.CTkLabel(self.table_frame, text=data[1], text_color="#1A202C", anchor="w", font=ctk.CTkFont(size=13)).grid(row=row, column=1, padx=15, pady=15, sticky="ew")
-            ctk.CTkLabel(self.table_frame, text=data[2], text_color="#1A202C", anchor="w", font=ctk.CTkFont(size=13)).grid(row=row, column=2, padx=15, pady=15, sticky="ew")
+            ctk.CTkLabel(self.table_frame, text=nombre_completo, text_color="#1A202C", anchor="w", font=ctk.CTkFont(size=13)).grid(row=row, column=2, padx=15, pady=15, sticky="ew")
             
             # Botones Acciones
             acciones_frame = ctk.CTkFrame(self.table_frame, fg_color="transparent")
@@ -115,20 +150,23 @@ class App(ctk.CTk):
                 sep = ctk.CTkFrame(self.table_frame, height=1, fg_color="#EDF2F7")
                 sep.grid(row=row, column=0, columnspan=4, sticky="sew", padx=10)
 
-    def open_new_student_window(self):
-        new_window = ctk.CTkToplevel(self)
-        new_window.title("Nuevo Estudiante")
-        new_window.geometry("900x700")
-        new_window.configure(fg_color="#F9FAFB")
-        new_window.attributes("-topmost", True)
-        new_window.after(10, new_window.lift)
+    def show_new_student_form(self):
+        self.clear_main_frame()
+        self.main_frame.grid_rowconfigure(0, weight=1)
+        self.main_frame.grid_columnconfigure(0, weight=1)
 
         # Scrollable Frame
-        main_scroll = ctk.CTkScrollableFrame(new_window, fg_color="transparent")
-        main_scroll.pack(fill="both", expand=True)
+        main_scroll = ctk.CTkScrollableFrame(self.main_frame, fg_color="transparent")
+        main_scroll.grid(row=0, column=0, sticky="nsew")
+
+        # Boton "Volver"
+        header_frame_back = ctk.CTkFrame(main_scroll, fg_color="transparent")
+        header_frame_back.pack(fill="x", padx=40, pady=(30, 0))
+        btn_volver = ctk.CTkButton(header_frame_back, text="← Volver a la lista", fg_color="transparent", text_color="#4A5568", font=ctk.CTkFont(weight="bold", size=14), width=80, hover_color="#E2E8F0", command=self.show_student_list)
+        btn_volver.pack(side="left")
 
         header_lbl = ctk.CTkLabel(main_scroll, text="Nuevo Estudiante", font=ctk.CTkFont(size=24, weight="bold"), text_color="#1A202C")
-        header_lbl.pack(anchor="w", padx=40, pady=(30, 0))
+        header_lbl.pack(anchor="w", padx=40, pady=(10, 0))
         
         sub_lbl = ctk.CTkLabel(main_scroll, text="Registra los datos del nuevo estudiante", font=ctk.CTkFont(size=14), text_color="#718096")
         sub_lbl.pack(anchor="w", padx=40, pady=(5, 20))
@@ -153,10 +191,12 @@ class App(ctk.CTk):
             entry.pack(fill="x")
             return entry
 
-        create_field(left_frame, "Nombre", "Ingrese el nombre")
-        create_field(left_frame, "Apellido", "Ingrese el apellido")
-        create_field(left_frame, "Cédula", "V-12345678")
-        create_field(left_frame, "Fecha de Nacimiento", "dd/mm/aaaa")
+        self.entry_p_nombre = create_field(left_frame, "Primer Nombre", "Ej: Juan")
+        self.entry_s_nombre = create_field(left_frame, "Segundo Nombre", "Ej: Carlos")
+        self.entry_p_apellido = create_field(left_frame, "Primer Apellido", "Ej: Perez")
+        self.entry_s_apellido = create_field(left_frame, "Segundo Apellido", "Ej: Gomez")
+        self.entry_cedula = create_field(left_frame, "Cédula", "V-12345678")
+        self.entry_fecha = create_field(left_frame, "Fecha de Nacimiento", "dd/mm/aaaa")
 
         # --- Right Column - Foto ---
         right_frame = ctk.CTkFrame(card_frame, fg_color="transparent")
@@ -184,8 +224,31 @@ class App(ctk.CTk):
         text_lbl2 = ctk.CTkLabel(preview_inner, text="Tamaño carta recomendado", font=ctk.CTkFont(size=12), text_color="#A0AEC0")
         text_lbl2.pack()
 
+        self.ruta_foto = ""
+        def seleccionar_foto():
+            filepath = filedialog.askopenfilename(title="Seleccionar Foto", filetypes=[("Imágenes", "*.jpg *.jpeg *.png")])
+            if filepath:
+                self.ruta_foto = filepath
+                try:
+                    # Cargar y mostrar la imagen real
+                    img = Image.open(filepath)
+                    # Calcular el tamaño manteniendo la proporción (altura fija de 120px)
+                    img_ratio = img.width / img.height
+                    target_height = 120
+                    target_width = int(target_height * img_ratio)
+                    ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(target_width, target_height))
+                    
+                    icon_lbl.configure(image=ctk_img, text="")
+                    # Guardamos la referencia de la imagen para evitar que se borre de memoria
+                    icon_lbl.image = ctk_img 
+                    
+                    text_lbl1.configure(text="Foto seleccionada:")
+                    text_lbl2.configure(text=filepath.split("/")[-1])
+                except Exception as e:
+                    messagebox.showerror("Error", f"No se pudo cargar la imagen: {e}")
+
         # Select Photo Button
-        btn_foto = ctk.CTkButton(preview_bg, text="Seleccionar Foto", fg_color="#0B0F19", text_color="white", font=ctk.CTkFont(weight="bold", size=14), corner_radius=8, height=45, hover_color="#1F2937", width=200)
+        btn_foto = ctk.CTkButton(preview_bg, text="Seleccionar Foto", fg_color="#0B0F19", text_color="white", font=ctk.CTkFont(weight="bold", size=14), corner_radius=8, height=45, hover_color="#1F2937", width=200, command=seleccionar_foto)
         btn_foto.place(relx=0.5, rely=0.8, anchor="center")
 
         lbl_formato = ctk.CTkLabel(preview_bg, text="Formatos: JPG, PNG", font=ctk.CTkFont(size=11), text_color="#A0AEC0")
@@ -195,31 +258,49 @@ class App(ctk.CTk):
         nivel_lbl = ctk.CTkLabel(main_scroll, text="Nivel Educativo y Grado", font=ctk.CTkFont(size=18, weight="bold"), text_color="#1A202C")
         nivel_lbl.pack(anchor="w", padx=40, pady=(10, 20))
 
-        radio_var = ctk.StringVar(value="")
-
         def create_accordion(parent, title, options):
             acc_frame = ctk.CTkFrame(parent, fg_color="white", corner_radius=8, border_width=1, border_color="#E2E8F0")
             acc_frame.pack(fill="x", padx=40, pady=(0, 20))
 
-            header_frame = ctk.CTkFrame(acc_frame, fg_color="#F3F4F6", corner_radius=0, height=45)
+            header_frame = ctk.CTkFrame(acc_frame, fg_color="#F3F4F6", corner_radius=0, height=45, cursor="hand2")
             header_frame.pack(fill="x")
             header_frame.grid_propagate(False)
             
-            lbl_title = ctk.CTkLabel(header_frame, text=title, font=ctk.CTkFont(size=14, weight="bold"), text_color="#1A202C")
+            lbl_title = ctk.CTkLabel(header_frame, text=title, font=ctk.CTkFont(size=14, weight="bold"), text_color="#1A202C", cursor="hand2")
             lbl_title.pack(side="left", padx=15)
             
-            lbl_arrow = ctk.CTkLabel(header_frame, text="⌃", font=ctk.CTkFont(size=16, weight="bold"), text_color="#1A202C")
+            lbl_arrow = ctk.CTkLabel(header_frame, text="⌃", font=ctk.CTkFont(size=16, weight="bold"), text_color="#1A202C", cursor="hand2")
             lbl_arrow.pack(side="right", padx=15)
 
+            content_frame = ctk.CTkFrame(acc_frame, fg_color="transparent")
+            content_frame.pack(fill="x", pady=(0, 10))
+
             for opt in options:
-                row_frame = ctk.CTkFrame(acc_frame, fg_color="transparent")
+                row_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
                 row_frame.pack(fill="x", padx=15, pady=8)
                 
-                rb = ctk.CTkRadioButton(row_frame, text=opt, variable=radio_var, value=opt, font=ctk.CTkFont(size=13), text_color="#4A5568", border_color="#CBD5E1", hover_color="#94A3B8")
-                rb.pack(side="left")
+                lbl_opt = ctk.CTkLabel(row_frame, text=opt, font=ctk.CTkFont(size=13), text_color="#4A5568")
+                lbl_opt.pack(side="left")
                 
                 btn_archivo = ctk.CTkButton(row_frame, text="↑ Archivo", fg_color="#0B0F19", text_color="white", width=80, height=28, font=ctk.CTkFont(size=12, weight="bold"), corner_radius=6, hover_color="#1F2937")
                 btn_archivo.pack(side="right")
+
+            # Estado del acordeón
+            acc_frame.is_expanded = True
+
+            def toggle_accordion(event=None):
+                if acc_frame.is_expanded:
+                    content_frame.pack_forget()
+                    lbl_arrow.configure(text="⌄")
+                    acc_frame.is_expanded = False
+                else:
+                    content_frame.pack(fill="x", pady=(0, 10))
+                    lbl_arrow.configure(text="⌃")
+                    acc_frame.is_expanded = True
+
+            header_frame.bind("<Button-1>", toggle_accordion)
+            lbl_title.bind("<Button-1>", toggle_accordion)
+            lbl_arrow.bind("<Button-1>", toggle_accordion)
 
         create_accordion(main_scroll, "Maternal", ["Segundo Nivel", "Tercer Nivel"])
         create_accordion(main_scroll, "Primaria", ["1er Grado", "2do Grado", "3er Grado", "4to Grado", "5to Grado", "6to Grado"])
@@ -229,7 +310,47 @@ class App(ctk.CTk):
         save_btn_frame = ctk.CTkFrame(main_scroll, fg_color="transparent")
         save_btn_frame.pack(fill="x", padx=40, pady=(10, 40))
         
-        btn_guardar = ctk.CTkButton(save_btn_frame, text="Guardar Estudiante", fg_color="#0B0F19", text_color="white", font=ctk.CTkFont(weight="bold", size=14), corner_radius=8, height=45, hover_color="#1F2937")
+        def guardar_estudiante():
+            p_nom = self.entry_p_nombre.get()
+            s_nom = self.entry_s_nombre.get()
+            p_ape = self.entry_p_apellido.get()
+            s_ape = self.entry_s_apellido.get()
+            ced = self.entry_cedula.get()
+            f_nac = self.entry_fecha.get()
+            
+            if not p_nom or not p_ape or not ced:
+                messagebox.showerror("Error", "Los campos: Primer Nombre, Primer Apellido y Cédula son obligatorios.")
+                return
+            
+            foto_blob = None
+            if hasattr(self, 'ruta_foto') and self.ruta_foto:
+                try:
+                    with open(self.ruta_foto, 'rb') as f:
+                        foto_blob = f.read()
+                except Exception as e:
+                    messagebox.showerror("Error", f"No se pudo leer la foto: {e}")
+                    return
+
+            try:
+                conn = sqlite3.connect('notas.db')
+                cursor = conn.cursor()
+                
+                cursor.execute('''
+                    INSERT INTO estudiantes (primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, cedula, fecha_nacimiento, foto, grado_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+                ''', (p_nom, s_nom, p_ape, s_ape, ced, f_nac, foto_blob))
+                
+                conn.commit()
+                conn.close()
+                
+                messagebox.showinfo("Éxito", "Estudiante guardado correctamente.")
+                self.show_student_list()
+            except sqlite3.IntegrityError:
+                messagebox.showerror("Error", "Ya existe un estudiante registrado con esta cédula.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Ocurrió un error: {e}")
+
+        btn_guardar = ctk.CTkButton(save_btn_frame, text="Guardar Estudiante", fg_color="#0B0F19", text_color="white", font=ctk.CTkFont(weight="bold", size=14), corner_radius=8, height=45, hover_color="#1F2937", command=guardar_estudiante)
         btn_guardar.pack(side="right")
 
 if __name__ == "__main__":
