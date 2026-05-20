@@ -171,13 +171,12 @@ class App(ctk.CTk):
         sub_lbl = ctk.CTkLabel(main_scroll, text="Registra los datos del nuevo estudiante", font=ctk.CTkFont(size=14), text_color="#718096")
         sub_lbl.pack(anchor="w", padx=40, pady=(5, 20))
 
-        # Main Card Frame (Datos Personales y Foto)
+        # Main Card Frame (Datos Personales)
         card_frame = ctk.CTkFrame(main_scroll, fg_color="white", corner_radius=10, border_width=1, border_color="#E2E8F0")
         card_frame.pack(fill="x", padx=40, pady=(0, 30))
         card_frame.grid_columnconfigure(0, weight=1)
-        card_frame.grid_columnconfigure(1, weight=1)
 
-        # --- Left Column - Datos Personales ---
+        # --- Datos Personales ---
         left_frame = ctk.CTkFrame(card_frame, fg_color="transparent")
         left_frame.grid(row=0, column=0, padx=30, pady=30, sticky="nsew")
 
@@ -197,62 +196,6 @@ class App(ctk.CTk):
         self.entry_s_apellido = create_field(left_frame, "Segundo Apellido", "Ej: Gomez")
         self.entry_cedula = create_field(left_frame, "Cédula", "V-12345678")
         self.entry_fecha = create_field(left_frame, "Fecha de Nacimiento", "dd/mm/aaaa")
-
-        # --- Right Column - Foto ---
-        right_frame = ctk.CTkFrame(card_frame, fg_color="transparent")
-        right_frame.grid(row=0, column=1, padx=30, pady=30, sticky="nsew")
-
-        lbl_foto = ctk.CTkLabel(right_frame, text="Foto del Estudiante (Tamaño Carta)", font=ctk.CTkFont(size=14, weight="bold"), text_color="#1A202C")
-        lbl_foto.pack(anchor="w", pady=(0, 10))
-
-        # Photo Preview Area
-        preview_border = ctk.CTkFrame(right_frame, fg_color="transparent", corner_radius=10, border_width=2, border_color="#E2E8F0")
-        preview_border.pack(fill="both", expand=True)
-
-        preview_bg = ctk.CTkFrame(preview_border, fg_color="#F3F4F6", corner_radius=8)
-        preview_bg.pack(fill="both", expand=True, padx=10, pady=10)
-
-        # Inner content of preview
-        preview_inner = ctk.CTkFrame(preview_bg, fg_color="transparent")
-        preview_inner.place(relx=0.5, rely=0.4, anchor="center")
-
-        icon_lbl = ctk.CTkLabel(preview_inner, text="👥", font=ctk.CTkFont(size=60), text_color="#9CA3AF")
-        icon_lbl.pack()
-
-        text_lbl1 = ctk.CTkLabel(preview_inner, text="Vista previa de la foto", font=ctk.CTkFont(size=14), text_color="#718096")
-        text_lbl1.pack(pady=(10,0))
-        text_lbl2 = ctk.CTkLabel(preview_inner, text="Tamaño carta recomendado", font=ctk.CTkFont(size=12), text_color="#A0AEC0")
-        text_lbl2.pack()
-
-        self.ruta_foto = ""
-        def seleccionar_foto():
-            filepath = filedialog.askopenfilename(title="Seleccionar Foto", filetypes=[("Imágenes", "*.jpg *.jpeg *.png")])
-            if filepath:
-                self.ruta_foto = filepath
-                try:
-                    # Cargar y mostrar la imagen real
-                    img = Image.open(filepath)
-                    # Calcular el tamaño manteniendo la proporción (altura fija de 120px)
-                    img_ratio = img.width / img.height
-                    target_height = 120
-                    target_width = int(target_height * img_ratio)
-                    ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(target_width, target_height))
-                    
-                    icon_lbl.configure(image=ctk_img, text="")
-                    # Guardamos la referencia de la imagen para evitar que se borre de memoria
-                    icon_lbl.image = ctk_img 
-                    
-                    text_lbl1.configure(text="Foto seleccionada:")
-                    text_lbl2.configure(text=filepath.split("/")[-1])
-                except Exception as e:
-                    messagebox.showerror("Error", f"No se pudo cargar la imagen: {e}")
-
-        # Select Photo Button
-        btn_foto = ctk.CTkButton(preview_bg, text="Seleccionar Foto", fg_color="#0B0F19", text_color="white", font=ctk.CTkFont(weight="bold", size=14), corner_radius=8, height=45, hover_color="#1F2937", width=200, command=seleccionar_foto)
-        btn_foto.place(relx=0.5, rely=0.8, anchor="center")
-
-        lbl_formato = ctk.CTkLabel(preview_bg, text="Formatos: JPG, PNG", font=ctk.CTkFont(size=11), text_color="#A0AEC0")
-        lbl_formato.place(relx=0.5, rely=0.92, anchor="center")
 
         # --- Seccion: Nivel Educativo y Grado ---
         nivel_lbl = ctk.CTkLabel(main_scroll, text="Nivel Educativo y Grado", font=ctk.CTkFont(size=18, weight="bold"), text_color="#1A202C")
@@ -302,8 +245,6 @@ class App(ctk.CTk):
             lbl_title.bind("<Button-1>", toggle_accordion)
             lbl_arrow.bind("<Button-1>", toggle_accordion)
 
-        create_accordion(main_scroll, "Maternal", ["Segundo Nivel", "Tercer Nivel"])
-        create_accordion(main_scroll, "Primaria", ["1er Grado", "2do Grado", "3er Grado", "4to Grado", "5to Grado", "6to Grado"])
         create_accordion(main_scroll, "Bachillerato", ["1er Año", "2do Año", "3er Año", "4to Año", "5to Año"])
         
         # Guardar / Acciones Finales
@@ -317,19 +258,9 @@ class App(ctk.CTk):
             s_ape = self.entry_s_apellido.get()
             ced = self.entry_cedula.get()
             f_nac = self.entry_fecha.get()
-            
             if not p_nom or not p_ape or not ced:
                 messagebox.showerror("Error", "Los campos: Primer Nombre, Primer Apellido y Cédula son obligatorios.")
                 return
-            
-            foto_blob = None
-            if hasattr(self, 'ruta_foto') and self.ruta_foto:
-                try:
-                    with open(self.ruta_foto, 'rb') as f:
-                        foto_blob = f.read()
-                except Exception as e:
-                    messagebox.showerror("Error", f"No se pudo leer la foto: {e}")
-                    return
 
             try:
                 conn = sqlite3.connect('notas.db')
@@ -337,8 +268,8 @@ class App(ctk.CTk):
                 
                 cursor.execute('''
                     INSERT INTO estudiantes (primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, cedula, fecha_nacimiento, foto, grado_id)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
-                ''', (p_nom, s_nom, p_ape, s_ape, ced, f_nac, foto_blob))
+                    VALUES (?, ?, ?, ?, ?, ?, NULL, NULL)
+                ''', (p_nom, s_nom, p_ape, s_ape, ced, f_nac))
                 
                 conn.commit()
                 conn.close()
