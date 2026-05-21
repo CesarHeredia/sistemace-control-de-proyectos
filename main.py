@@ -59,6 +59,22 @@ class App(ctk.CTk):
         # Cargar vista por defecto
         self.show_student_list()
 
+    def _bind_mouse_scroll(self, scrollable_frame):
+        def scroll_up(event):
+            if scrollable_frame.winfo_exists():
+                try:
+                    scrollable_frame._parent_canvas.yview("scroll", -1, "units")
+                except:
+                    pass
+        def scroll_down(event):
+            if scrollable_frame.winfo_exists():
+                try:
+                    scrollable_frame._parent_canvas.yview("scroll", 1, "units")
+                except:
+                    pass
+        self.bind_all("<Button-4>", scroll_up)
+        self.bind_all("<Button-5>", scroll_down)
+
     def clear_main_frame(self):
         for widget in self.main_frame.winfo_children():
             widget.destroy()
@@ -140,15 +156,80 @@ class App(ctk.CTk):
             acciones_frame = ctk.CTkFrame(self.table_frame, fg_color="transparent")
             acciones_frame.grid(row=row, column=3, padx=15, pady=15)
             
-            btn_edit = ctk.CTkButton(acciones_frame, text="📝", width=32, height=32, fg_color="transparent", text_color="#718096", hover_color="#F3F4F6", font=ctk.CTkFont(size=16))
-            btn_edit.pack(side="left", padx=5)
-            btn_del = ctk.CTkButton(acciones_frame, text="🗑️", width=32, height=32, fg_color="transparent", text_color="#E53E3E", hover_color="#FED7D7", font=ctk.CTkFont(size=16))
-            btn_del.pack(side="left", padx=5)
+            btn_view = ctk.CTkButton(acciones_frame, text="👁️", width=32, height=32, fg_color="transparent", text_color="#3182CE", hover_color="#EBF8FF", font=ctk.CTkFont(size=16), command=lambda s_id=data[0]: self.show_student_details(s_id))
+            btn_view.pack(side="left", padx=5)
             
             # Línea separadora horizontal para cada fila
             if row < len(estudiantes):
                 sep = ctk.CTkFrame(self.table_frame, height=1, fg_color="#EDF2F7")
                 sep.grid(row=row, column=0, columnspan=4, sticky="sew", padx=10)
+
+    def show_student_details(self, student_id):
+        self.clear_main_frame()
+        self.main_frame.grid_rowconfigure(0, weight=1)
+        self.main_frame.grid_columnconfigure(0, weight=1)
+
+        main_scroll = ctk.CTkScrollableFrame(self.main_frame, fg_color="transparent")
+        main_scroll.grid(row=0, column=0, sticky="nsew")
+        self._bind_mouse_scroll(main_scroll)
+
+        # Botón Volver
+        header_frame_back = ctk.CTkFrame(main_scroll, fg_color="transparent")
+        header_frame_back.pack(fill="x", padx=40, pady=(30, 0))
+        btn_volver = ctk.CTkButton(header_frame_back, text="← Volver a la lista", fg_color="transparent", text_color="#4A5568", font=ctk.CTkFont(weight="bold", size=14), width=80, hover_color="#E2E8F0", command=self.show_student_list)
+        btn_volver.pack(side="left")
+
+        try:
+            conn = sqlite3.connect('notas.db')
+            cursor = conn.cursor()
+            cursor.execute('SELECT primer_nombre, segundo_nombre, primer_apellido, segundo_apellido, cedula, fecha_nacimiento FROM estudiantes WHERE id = ?', (student_id,))
+            estudiante = cursor.fetchone()
+            conn.close()
+        except Exception as e:
+            messagebox.showerror("Error", f"Ocurrió un error al cargar el estudiante: {e}")
+            self.show_student_list()
+            return
+
+        if not estudiante:
+            messagebox.showerror("Error", "Estudiante no encontrado.")
+            self.show_student_list()
+            return
+
+        p_nom, s_nom, p_ape, s_ape, ced, f_nac = estudiante
+        nombre_completo = f"{p_nom} {s_nom or ''} {p_ape} {s_ape or ''}".strip()
+
+        header_lbl = ctk.CTkLabel(main_scroll, text="Detalles del Estudiante", font=ctk.CTkFont(size=24, weight="bold"), text_color="#1A202C")
+        header_lbl.pack(anchor="w", padx=40, pady=(10, 0))
+
+        sub_lbl = ctk.CTkLabel(main_scroll, text="Información registrada del estudiante", font=ctk.CTkFont(size=14), text_color="#718096")
+        sub_lbl.pack(anchor="w", padx=40, pady=(5, 20))
+
+        # Main Card Frame
+        card_frame = ctk.CTkFrame(main_scroll, fg_color="white", corner_radius=10, border_width=1, border_color="#E2E8F0")
+        card_frame.pack(fill="x", padx=40, pady=(0, 30))
+        card_frame.grid_columnconfigure(0, weight=1)
+
+        left_frame = ctk.CTkFrame(card_frame, fg_color="transparent")
+        left_frame.grid(row=0, column=0, padx=30, pady=30, sticky="nsew")
+
+        lbl_datos = ctk.CTkLabel(left_frame, text="Datos Personales", font=ctk.CTkFont(size=16, weight="bold"), text_color="#1A202C")
+        lbl_datos.pack(anchor="w", pady=(0, 20))
+
+        def create_info_row(parent, label, value):
+            row_frame = ctk.CTkFrame(parent, fg_color="transparent")
+            row_frame.pack(fill="x", pady=5)
+            lbl_key = ctk.CTkLabel(row_frame, text=label + ":", font=ctk.CTkFont(size=14, weight="bold"), text_color="#4A5568", width=150, anchor="w")
+            lbl_key.pack(side="left")
+            lbl_val = ctk.CTkLabel(row_frame, text=value if value else "No especificado", font=ctk.CTkFont(size=14), text_color="#1A202C", anchor="w")
+            lbl_val.pack(side="left", padx=10)
+
+        create_info_row(left_frame, "Cédula", ced)
+        create_info_row(left_frame, "Nombre Completo", nombre_completo)
+        create_info_row(left_frame, "Primer Nombre", p_nom)
+        create_info_row(left_frame, "Segundo Nombre", s_nom)
+        create_info_row(left_frame, "Primer Apellido", p_ape)
+        create_info_row(left_frame, "Segundo Apellido", s_ape)
+        create_info_row(left_frame, "Fecha de Nac.", f_nac)
 
     def show_new_student_form(self):
         self.clear_main_frame()
@@ -158,6 +239,7 @@ class App(ctk.CTk):
         # Scrollable Frame
         main_scroll = ctk.CTkScrollableFrame(self.main_frame, fg_color="transparent")
         main_scroll.grid(row=0, column=0, sticky="nsew")
+        self._bind_mouse_scroll(main_scroll)
 
         # Boton "Volver"
         header_frame_back = ctk.CTkFrame(main_scroll, fg_color="transparent")
