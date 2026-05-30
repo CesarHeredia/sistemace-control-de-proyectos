@@ -38,6 +38,17 @@ def crear_base_de_datos():
     )
     ''')
 
+    # Tabla de Documentos por Estudiante
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS documentos_estudiante (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        estudiante_id INTEGER,
+        ano_bachillerato TEXT NOT NULL,
+        ruta_archivo TEXT NOT NULL,
+        FOREIGN KEY (estudiante_id) REFERENCES estudiantes(id)
+    )
+    ''')
+
     # Insertar datos por defecto para niveles y grados según la interfaz
     niveles_grados = {
         "Maternal": ["Segundo Nivel", "Tercer Nivel"],
