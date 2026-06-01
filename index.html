@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>República de Indonesia - Sistema Escolar</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- LOGIN SCREEN -->
+  <div id="loginScreen" class="screen login-screen">
+    <div class="login-bg"></div>
+    <div class="login-container">
+      <div class="login-card">
+        <div class="login-logo">
+          <div class="logo-icon">
+            <img src="escudo.jpg" alt="Escudo UEN República de Indonesia" style="width:80px;height:80px;object-fit:contain;border-radius:4px;">
+          </div>
+          <h1>República de Indonesia</h1>
+          <p>Sistema de Gestión Escolar</p>
+        </div>
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-form="login">Iniciar Sesión</button>
+          <button class="auth-tab" data-form="register">Crear Cuenta</button>
+        </div>
+
+        <form id="loginForm" class="auth-form active">
+          <div class="input-group">
+            <i class="fas fa-user"></i>
+            <input type="text" id="username" placeholder="Usuario" autocomplete="off">
+          </div>
+          <div class="input-group">
+            <i class="fas fa-lock"></i>
+            <input type="password" id="password" placeholder="Contraseña">
+          </div>
+          <button type="submit" class="btn-login">
+            <span>Ingresar</span>
+            <i class="fas fa-arrow-right"></i>
+          </button>
+          <p class="login-error" id="loginError">Usuario o contraseña incorrectos</p>
+        </form>
+
+        <form id="registerForm" class="auth-form">
+          <div class="input-group">
+            <i class="fas fa-user"></i>
+            <input type="text" id="regUser" placeholder="Usuario" autocomplete="off">
+          </div>
+          <div class="input-group">
+            <i class="fas fa-lock"></i>
+            <input type="password" id="regPass" placeholder="Contraseña">
+          </div>
+          <div class="input-group">
+            <i class="fas fa-check-circle"></i>
+            <input type="password" id="regPassConfirm" placeholder="Confirmar Contraseña">
+          </div>
+          <div class="input-group">
+            <i class="fas fa-layer-group"></i>
+            <select id="regLevel">
+              <option value="primaria">Primaria</option>
+              <option value="prescolar">Preescolar</option>
+              <option value="bachillerato">Bachillerato</option>
+            </select>
+          </div>
+          <button type="submit" class="btn-login">
+            <span>Registrarse</span>
+            <i class="fas fa-user-plus"></i>
+          </button>
+          <p class="login-error" id="registerError">Completa todos los campos correctamente</p>
+          <p class="login-success" id="registerSuccess">¡Cuenta creada exitosamente!</p>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEVEL SELECTION SCREEN (removed - level chosen at registration) -->
+
+  <!-- DASHBOARD SCREEN -->
+  <div id="dashboardScreen" class="screen dashboard-screen">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">
+          <img src="escudo.jpg" alt="Escudo" style="width:44px;height:44px;object-fit:contain;border-radius:4px;">
+        </div>
+        <h3>República de Indonesia</h3>
+      </div>
+      <nav class="sidebar-nav">
+        <a class="nav-item active" data-tab="inicio">
+          <i class="fas fa-home"></i>
+          <span>Inicio</span>
+        </a>
+        <a class="nav-item" data-tab="alumnos">
+          <i class="fas fa-user-graduate"></i>
+          <span>Alumnos</span>
+        </a>
+        <a class="nav-item" data-tab="niveles">
+          <i class="fas fa-layer-group"></i>
+          <span>Niveles</span>
+        </a>
+      </nav>
+      <div class="sidebar-user" id="sidebarUser">
+        <div class="sidebar-avatar">
+          <i class="fas fa-user"></i>
+        </div>
+        <div class="sidebar-user-info">
+          <span class="sidebar-user-name" id="sidebarUserName">admin</span>
+          <span class="sidebar-user-level" id="sidebarUserLevel">Administrador</span>
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <button id="logoutBtn" class="btn-logout">
+          <i class="fas fa-sign-out-alt"></i>
+          <span>Cerrar Sesión</span>
+        </button>
+      </div>
+    </aside>
+
+    <div class="main-content">
+      <header class="topbar">
+        <button class="hamburger" id="hamburger">
+          <i class="fas fa-bars"></i>
+        </button>
+        <div class="topbar-left">
+          <div class="school-logo">
+            <img src="escudo.jpg" alt="Escudo" style="width:40px;height:40px;object-fit:contain;border-radius:4px;">
+          </div>
+          <div class="school-info">
+            <h2 id="dashboardTitle">Inicio</h2>
+            <span id="currentLevel">Primaria</span>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchInput" placeholder="Buscar alumnos...">
+          </div>
+        </div>
+      </header>
+
+      <div class="content-area">
+        <!-- TAB: INICIO -->
+        <div class="tab-content active" id="tab-inicio">
+          <div class="welcome-section">
+            <div class="welcome-card">
+              <h2>Bienvenido al Sistema</h2>
+              <p>Selecciona un nivel educativo para comenzar a gestionar los alumnos.</p>
+              <div class="welcome-levels">
+                <button class="welcome-level-btn" data-level="primaria" style="--btn-color: #4f46e5">
+                  <i class="fas fa-book"></i>
+                  Primaria
+                </button>
+                <button class="welcome-level-btn" data-level="prescolar" style="--btn-color: #f59e0b">
+                  <i class="fas fa-paint-brush"></i>
+                  Preescolar
+                </button>
+                <button class="welcome-level-btn" data-level="bachillerato" style="--btn-color: #10b981">
+                  <i class="fas fa-flask"></i>
+                  Bachillerato
+                </button>
+              </div>
+            </div>
+            <div class="stats-cards">
+              <div class="stat-card" style="--stat-color: #4f46e5">
+                <i class="fas fa-book"></i>
+                <span class="stat-number" id="count-primaria">0</span>
+                <span class="stat-label">Primaria</span>
+              </div>
+              <div class="stat-card" style="--stat-color: #f59e0b">
+                <i class="fas fa-paint-brush"></i>
+                <span class="stat-number" id="count-prescolar">0</span>
+                <span class="stat-label">Preescolar</span>
+              </div>
+              <div class="stat-card" style="--stat-color: #10b981">
+                <i class="fas fa-flask"></i>
+                <span class="stat-number" id="count-bachillerato">0</span>
+                <span class="stat-label">Bachillerato</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- BUSCADOR DE INICIO -->
+          <div class="search-results-section">
+            <div class="section-header">
+              <h3><i class="fas fa-search"></i> Resultados de Búsqueda</h3>
+              <span class="result-count" id="resultCount">0 alumnos</span>
+            </div>
+            <div class="table-container">
+              <table class="student-table" id="searchResultsTable">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Apellido</th>
+                    <th>Nivel</th>
+                    <th>Cédula</th>
+                    <th>Ver</th>
+                  </tr>
+                </thead>
+                <tbody id="searchResultsBody">
+                </tbody>
+              </table>
+              <div class="empty-state" id="searchEmpty">
+                <i class="fas fa-search"></i>
+                <p>Busca alumnos por nombre, apellido o matrícula</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: ALUMNOS -->
+        <div class="tab-content" id="tab-alumnos">
+          <div class="students-header">
+            <h3><i class="fas fa-user-graduate"></i> Lista de Alumnos</h3>
+            <button class="btn-add" id="addStudentBtn">
+              <i class="fas fa-plus"></i>
+              Agregar Alumno
+            </button>
+          </div>
+          <div class="table-container">
+            <table class="student-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Apellido</th>
+                  <th>Nivel</th>
+                  <th>Cédula</th>
+                  <th>Ver</th>
+                </tr>
+              </thead>
+              <tbody id="studentsTableBody">
+              </tbody>
+            </table>
+            <div class="empty-state" id="studentsEmpty">
+              <i class="fas fa-user-graduate"></i>
+              <p>No hay alumnos registrados en este nivel</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB: NIVELES -->
+        <div class="tab-content" id="tab-niveles">
+          <h3><i class="fas fa-layer-group"></i> Niveles Educativos</h3>
+          <p class="section-desc">Selecciona un nivel para ver sus alumnos</p>
+          <div class="level-selector">
+            <button class="level-tab active" data-level="primaria">Primaria</button>
+            <button class="level-tab" data-level="prescolar">Preescolar</button>
+            <button class="level-tab" data-level="bachillerato">Bachillerato</button>
+          </div>
+          <div class="table-container">
+            <table class="student-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Apellido</th>
+                  <th>Cédula</th>
+                  <th>Ver</th>
+                </tr>
+              </thead>
+              <tbody id="levelsTableBody">
+              </tbody>
+            </table>
+            <div class="empty-state" id="levelsEmpty">
+              <i class="fas fa-layer-group"></i>
+              <p>No hay alumnos en este nivel</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD STUDENT MODAL -->
+  <div class="modal-overlay" id="addStudentModal">
+    <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto;">
+      <div class="modal-header">
+        <h3><i class="fas fa-user-plus"></i> Agregar Alumno</h3>
+        <button class="modal-close" id="closeModal">&times;</button>
+      </div>
+      <form id="studentForm" class="modal-form">
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Nombre</label>
+            <input type="text" id="sName" placeholder="Nombre del alumno" autocomplete="off" required>
+          </div>
+          <div class="form-group">
+            <label>Apellido</label>
+            <input type="text" id="sLastName" placeholder="Apellido del alumno" autocomplete="off" required>
+          </div>
+          <div class="form-group">
+            <label>Nivel</label>
+            <select id="sLevel">
+              <option value="primaria">Primaria</option>
+              <option value="prescolar">Preescolar</option>
+              <option value="bachillerato">Bachillerato</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Cédula</label>
+            <input type="text" id="sId" placeholder="Ej: 12345678" required>
+          </div>
+        </div>
+
+        <!-- SECCIÓN DE NOTAS -->
+        <div id="notasSection" style="margin-top:20px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+            <i class="fas fa-folder-open" style="color:#4f46e5;font-size:1.1rem;"></i>
+            <h4 style="margin:0;color:#374151;font-size:1rem;">Archivos de Notas <span style="font-weight:400;color:#9ca3af;font-size:0.85rem;">(opcional)</span></h4>
+          </div>
+          <div id="notasFilesGrid" style="display:flex;flex-direction:column;gap:10px;">
+            <!-- Generado dinámicamente según el nivel -->
+          </div>
+        </div>
+
+        <div class="form-actions" style="margin-top:24px;">
+          <button type="button" class="btn-cancel" id="cancelModalBtn">Cancelar</button>
+          <button type="submit" class="btn-submit" id="saveStudentBtn">
+            <i class="fas fa-save"></i> Guardar Alumno
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- PERFIL ALUMNO MODAL -->
+  <div class="modal-overlay" id="perfilModal">
+    <div class="modal" style="max-width: 680px; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header">
+        <h3><i class="fas fa-user-circle"></i> Perfil del Alumno</h3>
+        <button class="modal-close" id="closePerfilModal">&times;</button>
+      </div>
+      <div id="perfilBody" style="padding: 24px;">
+        <!-- Datos del alumno -->
+        <div id="perfilDatos" style="display:flex;align-items:center;gap:20px;margin-bottom:28px;padding:20px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:14px;color:white;">
+          <div style="width:70px;height:70px;background:rgba(255,255,255,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2rem;flex-shrink:0;">
+            <i class="fas fa-user-graduate"></i>
+          </div>
+          <div style="flex:1;">
+            <h2 id="perfilNombreCompleto" style="margin:0 0 6px;font-size:1.4rem;"></h2>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:0.9rem;opacity:0.9;">
+              <span><i class="fas fa-id-card" style="margin-right:5px;"></i><span id="perfilCedula"></span></span>
+              <span><i class="fas fa-layer-group" style="margin-right:5px;"></i><span id="perfilNivel"></span></span>
+            </div>
+          </div>
+          <button id="perfilDeleteBtn" onclick="deleteFromProfile()" style="background:rgba(239,68,68,0.8);color:white;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:0.85rem;flex-shrink:0;">
+            <i class="fas fa-trash"></i> Eliminar
+          </button>
+        </div>
+        <!-- Archivos de notas -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <h4 style="margin:0;color:#374151;"><i class="fas fa-folder-open" style="color:#4f46e5;margin-right:8px;"></i>Archivos de Notas por Año</h4>
+          <button id="btnEditAnios" onclick="toggleEditAnios()" style="background:#f59e0b;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;display:none;">
+            <i class="fas fa-edit"></i> Editar Años
+          </button>
+        </div>
+        <div id="perfilNotas" style="display:flex;flex-direction:column;gap:12px;">
+          <!-- Dynamic notes -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="text/javascript" src="/eel.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
