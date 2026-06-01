@@ -298,6 +298,20 @@
             <label>Cédula</label>
             <input type="text" id="sId" placeholder="Ej: 12345678" required>
           </div>
+          <div class="form-group">
+            <label>Tipo de Estudiante</label>
+            <select id="sTipo">
+              <option value="Regular">Alumno Regular</option>
+              <option value="Egresado">Estudiante Egresado</option>
+              <option value="Nuevo Ingreso">Nuevo Ingreso</option>
+            </select>
+          </div>
+          <div class="form-group" id="sIngresoPeriodoGroup" style="display: none;">
+            <label>Año a Cursar</label>
+            <select id="sIngresoPeriodo">
+              <!-- Se llenará dinámicamente -->
+            </select>
+          </div>
         </div>
 
         <!-- SECCIÓN DE NOTAS -->
@@ -339,6 +353,7 @@
             <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:0.9rem;opacity:0.9;">
               <span><i class="fas fa-id-card" style="margin-right:5px;"></i><span id="perfilCedula"></span></span>
               <span><i class="fas fa-layer-group" style="margin-right:5px;"></i><span id="perfilNivel"></span></span>
+              <span><i class="fas fa-graduation-cap" style="margin-right:5px;"></i><span id="perfilTipo"></span></span>
             </div>
           </div>
           <button id="perfilDeleteBtn" onclick="deleteFromProfile()" style="background:rgba(239,68,68,0.8);color:white;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:0.85rem;flex-shrink:0;">

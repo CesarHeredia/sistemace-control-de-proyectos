@@ -366,19 +366,71 @@ $('addStudentBtn').addEventListener('click', () => {
   studentForm.reset();
   $('sLevel').value = currentLevel;
   $('sId').value = '';
+  $('sTipo').value = 'Regular';
+  $('sIngresoPeriodoGroup').style.display = 'none';
+  populateIngresoPeriodoDropdown();
   renderNotasModal(currentLevel);
 });
 
 // Re-render notes when level changes inside the modal
 $('sLevel').addEventListener('change', function() {
+  populateIngresoPeriodoDropdown();
   renderNotasModal(this.value);
 });
 
+// Handle type changes inside the modal
+$('sTipo').addEventListener('change', function() {
+  if (this.value === 'Nuevo Ingreso') {
+    $('sIngresoPeriodoGroup').style.display = 'block';
+    populateIngresoPeriodoDropdown();
+  } else {
+    $('sIngresoPeriodoGroup').style.display = 'none';
+  }
+  renderNotasModal($('sLevel').value);
+});
+
+$('sIngresoPeriodo').addEventListener('change', function() {
+  renderNotasModal($('sLevel').value);
+});
+
+function populateIngresoPeriodoDropdown() {
+  const nivel = $('sLevel').value;
+  const dropdown = $('sIngresoPeriodo');
+  const perList = periodos[nivel] || [];
+  dropdown.innerHTML = perList.map(p => `<option value="${p}">${p}</option>`).join('');
+}
+
 function renderNotasModal(nivel) {
   const grid = $('notasFilesGrid');
+  const tipo = $('sTipo').value;
+  const ingresoPeriodo = $('sIngresoPeriodo').value;
   const perList = periodos[nivel] || [];
   grid.innerHTML = '';
-  perList.forEach(p => {
+  
+  // Decide which periods to display
+  let periodsToShow = [];
+  if (tipo === 'Egresado') {
+    periodsToShow = ['Notas Totales'];
+  } else if (tipo === 'Nuevo Ingreso') {
+    const idx = perList.indexOf(ingresoPeriodo);
+    if (idx > 0) {
+      periodsToShow = ['Notas del Colegio Anterior'];
+    } else {
+      periodsToShow = [];
+    }
+  } else {
+    periodsToShow = perList;
+  }
+  
+  if (periodsToShow.length === 0) {
+    grid.innerHTML = `
+      <div style="padding:15px;text-align:center;color:#6b7280;background:#f3f4f6;border-radius:10px;font-size:0.9rem;">
+        No hay notas de años anteriores para adjuntar en este nivel de ingreso.
+      </div>`;
+    return;
+  }
+  
+  periodsToShow.forEach(p => {
     const safeId = 'addfile_' + p.replace(/[^a-zA-Z0-9]/g, '_');
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;';
@@ -395,6 +447,7 @@ function renderNotasModal(nivel) {
         </label>
       </div>
     `;
+    
     // Update label text when file picked
     const inputEl = row.querySelector(`#${safeId}`);
     inputEl.addEventListener('change', function() {
@@ -427,6 +480,9 @@ studentForm.addEventListener('submit', async (e) => {
 
   if (!newStudent.nombre || !newStudent.apellido || !newStudent.cedula) return;
 
+  const tipo = $('sTipo').value;
+  const ingreso_periodo = (tipo === 'Nuevo Ingreso') ? $('sIngresoPeriodo').value : null;
+
   // Collect files before saving (FileReader must run in sync context)
   const fileInputs = $('notasFilesGrid').querySelectorAll('input[type="file"]');
   const filesToUpload = [];
@@ -443,7 +499,7 @@ studentForm.addEventListener('submit', async (e) => {
   saveBtn.disabled = true;
   saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
 
-  const response = await eel.add_alumno(newStudent.cedula, newStudent.nombre, newStudent.apellido, newStudent.nivel)();
+  const response = await eel.add_alumno(newStudent.cedula, newStudent.nombre, newStudent.apellido, newStudent.nivel, tipo, ingreso_periodo)();
 
   if (!response.success) {
     saveBtn.disabled = false;
@@ -512,6 +568,9 @@ async function openPerfil(alumnoId) {
   $('perfilNombreCompleto').textContent = alumno.nombre + ' ' + alumno.apellido;
   $('perfilCedula').textContent = alumno.cedula;
   $('perfilNivel').textContent = levelNames[alumno.level];
+  $('perfilTipo').textContent = alumno.tipo === 'Nuevo Ingreso' 
+    ? `Nuevo Ingreso (${alumno.ingreso_periodo})` 
+    : (alumno.tipo || 'Regular');
   
   perfilModal.classList.add('show');
   
@@ -521,20 +580,53 @@ async function openPerfil(alumnoId) {
   
   const res = await eel.get_notas(alumnoId)();
   const notasSubidas = res.success ? res.notas : {};
-  const perList = periodos[alumno.level] || [];
+  
+  // Determinar la lista de periodos
+  let perList = [];
+  let entryIdx = -1;
+  
+  if (alumno.tipo === 'Egresado') {
+    perList = ['Notas Totales'];
+  } else if (alumno.tipo === 'Nuevo Ingreso') {
+    const fullList = periodos[alumno.level] || [];
+    entryIdx = fullList.indexOf(alumno.ingreso_periodo);
+    if (entryIdx > 0) {
+      perList = ['Notas del Colegio Anterior', ...fullList.slice(entryIdx)];
+    } else {
+      perList = fullList;
+    }
+  } else {
+    perList = periodos[alumno.level] || [];
+  }
   
   notasContainer.innerHTML = '';
   let hasAnyNote = false;
-  for (const p of perList) {
+  for (let i = 0; i < perList.length; i++) {
+    const p = perList[i];
     const notaInfo = notasSubidas[p];
     const tieneNota = !!notaInfo;
     if (tieneNota) hasAnyNote = true;
     const nombreArchivo = tieneNota ? notaInfo.archivo : null;
     const anio = tieneNota && notaInfo.anio ? ` (Año: ${notaInfo.anio})` : '';
 
-    const badge = tieneNota
-      ? '<span style="color:#10b981;font-size:0.85em;"><i class="fas fa-check-circle"></i> ' + nombreArchivo + anio + '</span>'
-      : '<span style="color:#9ca3af;font-size:0.85em;"><i class="fas fa-times-circle"></i> Sin archivo</span>';
+    let labelPrefix = '';
+    let badge = '';
+    
+    if (p === 'Notas del Colegio Anterior') {
+      labelPrefix = ' <span style="background:#6b7280;color:white;padding:2px 6px;border-radius:4px;font-size:0.75rem;margin-left:8px;font-weight:normal;">Col. Anterior</span>';
+      badge = tieneNota
+        ? `<span style="color:#10b981;font-size:0.85em;"><i class="fas fa-check-circle"></i> ${nombreArchivo}${anio}</span>`
+        : '<span style="color:#9ca3af;font-size:0.85em;"><i class="fas fa-times-circle"></i> Sin archivo (Colegio Anterior)</span>';
+    } else if (alumno.tipo === 'Nuevo Ingreso' && p !== 'Notas del Colegio Anterior') {
+      labelPrefix = ' <span style="background:#4f46e5;color:white;padding:2px 6px;border-radius:4px;font-size:0.75rem;margin-left:8px;font-weight:normal;">En el colegio</span>';
+      badge = tieneNota
+        ? `<span style="color:#10b981;font-size:0.85em;"><i class="fas fa-check-circle"></i> ${nombreArchivo}${anio}</span>`
+        : '<span style="color:#ef4444;font-size:0.85em;"><i class="fas fa-exclamation-circle"></i> Falta por ver en el colegio</span>';
+    } else {
+      badge = tieneNota
+        ? `<span style="color:#10b981;font-size:0.85em;"><i class="fas fa-check-circle"></i> ${nombreArchivo}${anio}</span>`
+        : '<span style="color:#9ca3af;font-size:0.85em;"><i class="fas fa-times-circle"></i> Sin archivo</span>';
+    }
     
     const verBtn = tieneNota
       ? `<button onclick="verArchivo(${alumnoId}, '${p}')" style="background:#10b981;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;">
@@ -546,14 +638,14 @@ async function openPerfil(alumnoId) {
     row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;';
     row.innerHTML = `
       <div>
-        <span style="font-weight:600;color:#374151;">${p}</span><br>
+        <span style="font-weight:600;color:#374151;">${p}${labelPrefix}</span><br>
         <small>${badge}</small>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         ${verBtn}
-        <input type="text" id="panio_${alumnoId}_${p.replace(/ /g, '')}" data-periodo="${p}" placeholder="Año" style="width:70px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;" value="${tieneNota && notaInfo.anio ? notaInfo.anio : new Date().getFullYear()}" disabled class="anio-input">
-        <input type="file" id="pfile_${alumnoId}_${p.replace(/ /g, '')}" style="display:none;" onchange="uploadFileFromPerfil(${alumnoId}, '${p}', this)">
-        <button onclick="document.getElementById('pfile_${alumnoId}_${p.replace(/ /g, '')}').click()" style="background:#4f46e5;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;">
+        <input type="text" id="panio_${alumnoId}_${p.replace(/[^a-zA-Z0-9]/g, '_')}" data-periodo="${p}" placeholder="Año" style="width:70px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;" value="${tieneNota && notaInfo.anio ? notaInfo.anio : new Date().getFullYear()}" disabled class="anio-input">
+        <input type="file" id="pfile_${alumnoId}_${p.replace(/[^a-zA-Z0-9]/g, '_')}" style="display:none;" onchange="uploadFileFromPerfil(${alumnoId}, '${p}', this)">
+        <button onclick="document.getElementById('pfile_${alumnoId}_${p.replace(/[^a-zA-Z0-9]/g, '_')}').click()" style="background:#4f46e5;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;">
           <i class="fas fa-upload"></i> Subir
         </button>
       </div>
@@ -589,7 +681,6 @@ async function toggleEditAnios() {
     
     const periodosAnios = {};
     inputs.forEach(input => {
-      // Only include if there's a note (if Ver button is present, there is a note, or if input value changed, but let's just send all of them, the backend only updates where note exists anyway)
       periodosAnios[input.dataset.periodo] = input.value.trim();
     });
 
@@ -597,7 +688,6 @@ async function toggleEditAnios() {
     
     btn.disabled = false;
     if (res.success) {
-      // Reload profile to show updated years
       openPerfil(perfilAlumnoActual.id);
     } else {
       alert('Error guardando años: ' + res.error);
@@ -625,7 +715,7 @@ async function deleteFromProfile() {
 async function uploadFileFromPerfil(alumnoId, periodo, inputEl) {
   const file = inputEl.files[0];
   if (!file) return;
-  const anioInputId = `panio_${alumnoId}_${periodo.replace(/ /g, '')}`;
+  const anioInputId = `panio_${alumnoId}_${periodo.replace(/[^a-zA-Z0-9]/g, '_')}`;
   const anioInput = document.getElementById(anioInputId);
   const anio = anioInput ? anioInput.value.trim() : new Date().getFullYear().toString();
 

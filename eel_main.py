@@ -26,7 +26,9 @@ def init_db():
             nombre TEXT NOT NULL,
             apellido TEXT NOT NULL,
             nivel TEXT NOT NULL,
-            estado TEXT DEFAULT 'Activo'
+            estado TEXT DEFAULT 'Activo',
+            tipo TEXT DEFAULT 'Regular',
+            ingreso_periodo TEXT
         )
     ''')
     cursor.execute('''
@@ -41,6 +43,14 @@ def init_db():
     ''')
     try:
         cursor.execute("ALTER TABLE notas ADD COLUMN anio TEXT")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE alumnos ADD COLUMN tipo TEXT DEFAULT 'Regular'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cursor.execute("ALTER TABLE alumnos ADD COLUMN ingreso_periodo TEXT")
     except sqlite3.OperationalError:
         pass
     conn.commit()
@@ -98,9 +108,9 @@ def get_alumnos(nivel=None):
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         if nivel:
-            cursor.execute("SELECT a.id, a.cedula, a.nombre, a.apellido, a.nivel, a.estado, GROUP_CONCAT(n.anio) FROM alumnos a LEFT JOIN notas n ON a.id = n.alumno_id WHERE a.nivel = ? GROUP BY a.id", (nivel,))
+            cursor.execute("SELECT a.id, a.cedula, a.nombre, a.apellido, a.nivel, a.estado, GROUP_CONCAT(n.anio), a.tipo, a.ingreso_periodo FROM alumnos a LEFT JOIN notas n ON a.id = n.alumno_id WHERE a.nivel = ? GROUP BY a.id", (nivel,))
         else:
-            cursor.execute("SELECT a.id, a.cedula, a.nombre, a.apellido, a.nivel, a.estado, GROUP_CONCAT(n.anio) FROM alumnos a LEFT JOIN notas n ON a.id = n.alumno_id GROUP BY a.id")
+            cursor.execute("SELECT a.id, a.cedula, a.nombre, a.apellido, a.nivel, a.estado, GROUP_CONCAT(n.anio), a.tipo, a.ingreso_periodo FROM alumnos a LEFT JOIN notas n ON a.id = n.alumno_id GROUP BY a.id")
         rows = cursor.fetchall()
         conn.close()
         
@@ -113,18 +123,26 @@ def get_alumnos(nivel=None):
                 anios_list = list(set([a for a in anios_str.split(',') if a]))
                 
             result.append({
-                'id': r[0], 'cedula': r[1], 'nombre': r[2], 'apellido': r[3], 'level': r[4], 'status': r[5], 'anios': anios_list
+                'id': r[0],
+                'cedula': r[1],
+                'nombre': r[2],
+                'apellido': r[3],
+                'level': r[4],
+                'status': r[5],
+                'anios': anios_list,
+                'tipo': r[7] if len(r) > 7 and r[7] else 'Regular',
+                'ingreso_periodo': r[8] if len(r) > 8 else None
             })
         return result
     except Exception as e:
         return []
 
 @eel.expose
-def add_alumno(cedula, nombre, apellido, nivel):
+def add_alumno(cedula, nombre, apellido, nivel, tipo='Regular', ingreso_periodo=None):
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO alumnos (cedula, nombre, apellido, nivel) VALUES (?, ?, ?, ?)", (cedula, nombre, apellido, nivel))
+        cursor.execute("INSERT INTO alumnos (cedula, nombre, apellido, nivel, tipo, ingreso_periodo) VALUES (?, ?, ?, ?, ?, ?)", (cedula, nombre, apellido, nivel, tipo, ingreso_periodo))
         conn.commit()
         conn.close()
         return {'success': True}
