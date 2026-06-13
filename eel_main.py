@@ -28,7 +28,11 @@ def init_db():
             nivel TEXT NOT NULL,
             estado TEXT DEFAULT 'Activo',
             tipo TEXT DEFAULT 'Regular',
-            ingreso_periodo TEXT
+            ingreso_periodo TEXT,
+            direccion TEXT,
+            ciudad TEXT,
+            estado_residencia TEXT,
+            telefono_casa TEXT
         )
     ''')
     cursor.execute('''
@@ -41,17 +45,35 @@ def init_db():
             FOREIGN KEY (alumno_id) REFERENCES alumnos(id) ON DELETE CASCADE
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS familiares (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            alumno_id INTEGER NOT NULL,
+            nombre TEXT NOT NULL,
+            apellido TEXT NOT NULL,
+            cedula TEXT,
+            telefono TEXT,
+            parentesco TEXT DEFAULT 'Padre/Madre',
+            FOREIGN KEY (alumno_id) REFERENCES alumnos(id) ON DELETE CASCADE
+        )
+    ''')
+    # Migrations
+    for col_def in [
+        "ALTER TABLE notas ADD COLUMN anio TEXT",
+        "ALTER TABLE alumnos ADD COLUMN tipo TEXT DEFAULT 'Regular'",
+        "ALTER TABLE alumnos ADD COLUMN ingreso_periodo TEXT",
+        "ALTER TABLE alumnos ADD COLUMN direccion TEXT",
+        "ALTER TABLE alumnos ADD COLUMN ciudad TEXT",
+        "ALTER TABLE alumnos ADD COLUMN estado_residencia TEXT",
+        "ALTER TABLE alumnos ADD COLUMN telefono_casa TEXT",
+    ]:
+        try:
+            cursor.execute(col_def)
+        except sqlite3.OperationalError:
+            pass
     try:
-        cursor.execute("ALTER TABLE notas ADD COLUMN anio TEXT")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("ALTER TABLE alumnos ADD COLUMN tipo TEXT DEFAULT 'Regular'")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("ALTER TABLE alumnos ADD COLUMN ingreso_periodo TEXT")
-    except sqlite3.OperationalError:
+        cursor.execute("UPDATE usuarios SET nivel = 'primaria_prescolar' WHERE nivel IN ('primaria', 'prescolar')")
+    except Exception:
         pass
     conn.commit()
     conn.close()
@@ -108,9 +130,9 @@ def get_alumnos(nivel=None):
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         if nivel:
-            cursor.execute("SELECT a.id, a.cedula, a.nombre, a.apellido, a.nivel, a.estado, GROUP_CONCAT(n.anio), a.tipo, a.ingreso_periodo FROM alumnos a LEFT JOIN notas n ON a.id = n.alumno_id WHERE a.nivel = ? GROUP BY a.id", (nivel,))
+            cursor.execute("SELECT a.id, a.cedula, a.nombre, a.apellido, a.nivel, a.estado, GROUP_CONCAT(n.anio), a.tipo, a.ingreso_periodo, a.direccion, a.ciudad, a.estado_residencia, a.telefono_casa FROM alumnos a LEFT JOIN notas n ON a.id = n.alumno_id WHERE a.nivel = ? GROUP BY a.id", (nivel,))
         else:
-            cursor.execute("SELECT a.id, a.cedula, a.nombre, a.apellido, a.nivel, a.estado, GROUP_CONCAT(n.anio), a.tipo, a.ingreso_periodo FROM alumnos a LEFT JOIN notas n ON a.id = n.alumno_id GROUP BY a.id")
+            cursor.execute("SELECT a.id, a.cedula, a.nombre, a.apellido, a.nivel, a.estado, GROUP_CONCAT(n.anio), a.tipo, a.ingreso_periodo, a.direccion, a.ciudad, a.estado_residencia, a.telefono_casa FROM alumnos a LEFT JOIN notas n ON a.id = n.alumno_id GROUP BY a.id")
         rows = cursor.fetchall()
         conn.close()
         
@@ -119,7 +141,6 @@ def get_alumnos(nivel=None):
             anios_str = r[6]
             anios_list = []
             if anios_str:
-                # Filtrar valores nulos o repetidos si los hay
                 anios_list = list(set([a for a in anios_str.split(',') if a]))
                 
             result.append({
@@ -131,23 +152,80 @@ def get_alumnos(nivel=None):
                 'status': r[5],
                 'anios': anios_list,
                 'tipo': r[7] if len(r) > 7 and r[7] else 'Regular',
-                'ingreso_periodo': r[8] if len(r) > 8 else None
+                'ingreso_periodo': r[8] if len(r) > 8 else None,
+                'direccion': r[9] if len(r) > 9 else None,
+                'ciudad': r[10] if len(r) > 10 else None,
+                'estado_residencia': r[11] if len(r) > 11 else None,
+                'telefono_casa': r[12] if len(r) > 12 else None,
             })
         return result
     except Exception as e:
         return []
 
 @eel.expose
-def add_alumno(cedula, nombre, apellido, nivel, tipo='Regular', ingreso_periodo=None):
+def add_alumno(cedula, nombre, apellido, nivel, tipo='Regular', ingreso_periodo=None,
+               direccion=None, ciudad=None, estado_residencia=None, telefono_casa=None):
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO alumnos (cedula, nombre, apellido, nivel, tipo, ingreso_periodo) VALUES (?, ?, ?, ?, ?, ?)", (cedula, nombre, apellido, nivel, tipo, ingreso_periodo))
+        cursor.execute(
+            "INSERT INTO alumnos (cedula, nombre, apellido, nivel, tipo, ingreso_periodo, direccion, ciudad, estado_residencia, telefono_casa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (cedula, nombre, apellido, nivel, tipo, ingreso_periodo, direccion, ciudad, estado_residencia, telefono_casa)
+        )
+        alumno_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        return {'success': True, 'id': alumno_id}
+    except sqlite3.IntegrityError:
+        return {'success': False, 'error': 'Ya existe un alumno con esa cédula'}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def save_familiares(alumno_id, familiares):
+    """Reemplaza todos los familiares de un alumno."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM familiares WHERE alumno_id = ?", (alumno_id,))
+        for f in familiares:
+            cursor.execute(
+                "INSERT INTO familiares (alumno_id, nombre, apellido, cedula, telefono, parentesco) VALUES (?, ?, ?, ?, ?, ?)",
+                (alumno_id, f.get('nombre',''), f.get('apellido',''), f.get('cedula',''), f.get('telefono',''), f.get('parentesco', 'Padre/Madre'))
+            )
         conn.commit()
         conn.close()
         return {'success': True}
-    except sqlite3.IntegrityError:
-        return {'success': False, 'error': 'Ya existe un alumno con esa cédula'}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def get_familiares(alumno_id):
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, nombre, apellido, cedula, telefono, parentesco FROM familiares WHERE alumno_id = ?", (alumno_id,))
+        rows = cursor.fetchall()
+        conn.close()
+        return {'success': True, 'familiares': [
+            {'id': r[0], 'nombre': r[1], 'apellido': r[2], 'cedula': r[3], 'telefono': r[4], 'parentesco': r[5]}
+            for r in rows
+        ]}
+    except Exception as e:
+        return {'success': False, 'familiares': []}
+
+@eel.expose
+def update_alumno_datos(alumno_id, direccion, ciudad, estado_residencia, telefono_casa):
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE alumnos SET direccion=?, ciudad=?, estado_residencia=?, telefono_casa=? WHERE id=?",
+            (direccion, ciudad, estado_residencia, telefono_casa, alumno_id)
+        )
+        conn.commit()
+        conn.close()
+        return {'success': True}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
@@ -197,6 +275,41 @@ def upload_nota(alumno_id, periodo, base64_data, filename, anio):
         else:
             cursor.execute("INSERT INTO notas (alumno_id, periodo, archivo_nombre, archivo_ruta, anio) VALUES (?, ?, ?, ?, ?)", (alumno_id, periodo, filename, file_path, anio))
             
+        # Promotion and cleanup logic for primaria/prescolar
+        cursor.execute("SELECT nivel, tipo, ingreso_periodo FROM alumnos WHERE id = ?", (alumno_id,))
+        student = cursor.fetchone()
+        if student:
+            nivel, tipo, ingreso_periodo = student
+            if nivel in ('primaria', 'prescolar') and tipo in ('Regular', 'Nuevo Ingreso') and periodo == ingreso_periodo:
+                SEQUENCE_PERIODOS = [
+                    '2do Nivel', '3er Nivel',
+                    '1er Grado', '2do Grado', '3er Grado', '4to Grado', '5to Grado', '6to Grado'
+                ]
+                if ingreso_periodo in SEQUENCE_PERIODOS:
+                    idx = SEQUENCE_PERIODOS.index(ingreso_periodo)
+                    
+                    # 1. Delete the old previous period note
+                    if idx > 0:
+                        prev_period = SEQUENCE_PERIODOS[idx - 1]
+                        cursor.execute("SELECT archivo_ruta FROM notas WHERE alumno_id = ? AND periodo = ?", (alumno_id, prev_period))
+                        old_note = cursor.fetchone()
+                        if old_note:
+                            try:
+                                if os.path.exists(old_note[0]):
+                                    os.remove(old_note[0])
+                            except Exception:
+                                pass
+                            cursor.execute("DELETE FROM notas WHERE alumno_id = ? AND periodo = ?", (alumno_id, prev_period))
+                    
+                    # 2. Promote student to the next period
+                    if idx + 1 < len(SEQUENCE_PERIODOS):
+                        next_period = SEQUENCE_PERIODOS[idx + 1]
+                        next_level = 'primaria' if 'Grado' in next_period else 'prescolar'
+                        cursor.execute("UPDATE alumnos SET ingreso_periodo = ?, nivel = ? WHERE id = ?", (next_period, next_level, alumno_id))
+                    else:
+                        # Finished 6to Grado: promote to Egresado
+                        cursor.execute("UPDATE alumnos SET tipo = 'Egresado', ingreso_periodo = NULL WHERE id = ?", (alumno_id,))
+                        
         conn.commit()
         conn.close()
         return {'success': True}

@@ -16,7 +16,7 @@
       <div class="login-card">
         <div class="login-logo">
           <div class="logo-icon">
-            <img src="escudo.jpg" alt="Escudo UEN República de Indonesia" style="width:80px;height:80px;object-fit:contain;border-radius:4px;">
+            <img src="escudo.png" alt="Escudo UEN República de Indonesia" style="width:80px;height:80px;object-fit:contain;border-radius:4px;">
           </div>
           <h1>República de Indonesia</h1>
           <p>Sistema de Gestión Escolar</p>
@@ -58,8 +58,7 @@
           <div class="input-group">
             <i class="fas fa-layer-group"></i>
             <select id="regLevel">
-              <option value="primaria">Primaria</option>
-              <option value="prescolar">Preescolar</option>
+              <option value="primaria_prescolar">Primaria/Preescolar</option>
               <option value="bachillerato">Bachillerato</option>
             </select>
           </div>
@@ -81,7 +80,7 @@
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <div class="sidebar-logo">
-          <img src="escudo.jpg" alt="Escudo" style="width:44px;height:44px;object-fit:contain;border-radius:4px;">
+          <img src="escudo.png" alt="Escudo" style="object-fit:contain;border-radius:4px;">
         </div>
         <h3>República de Indonesia</h3>
       </div>
@@ -122,9 +121,6 @@
           <i class="fas fa-bars"></i>
         </button>
         <div class="topbar-left">
-          <div class="school-logo">
-            <img src="escudo.jpg" alt="Escudo" style="width:40px;height:40px;object-fit:contain;border-radius:4px;">
-          </div>
           <div class="school-info">
             <h2 id="dashboardTitle">Inicio</h2>
             <span id="currentLevel">Primaria</span>
@@ -146,13 +142,9 @@
               <h2>Bienvenido al Sistema</h2>
               <p>Selecciona un nivel educativo para comenzar a gestionar los alumnos.</p>
               <div class="welcome-levels">
-                <button class="welcome-level-btn" data-level="primaria" style="--btn-color: #4f46e5">
+                <button class="welcome-level-btn" data-level="primaria_prescolar" style="--btn-color: #4f46e5">
                   <i class="fas fa-book"></i>
-                  Primaria
-                </button>
-                <button class="welcome-level-btn" data-level="prescolar" style="--btn-color: #f59e0b">
-                  <i class="fas fa-paint-brush"></i>
-                  Preescolar
+                  Primaria/Preescolar
                 </button>
                 <button class="welcome-level-btn" data-level="bachillerato" style="--btn-color: #10b981">
                   <i class="fas fa-flask"></i>
@@ -160,16 +152,12 @@
                 </button>
               </div>
             </div>
+
             <div class="stats-cards">
               <div class="stat-card" style="--stat-color: #4f46e5">
                 <i class="fas fa-book"></i>
-                <span class="stat-number" id="count-primaria">0</span>
-                <span class="stat-label">Primaria</span>
-              </div>
-              <div class="stat-card" style="--stat-color: #f59e0b">
-                <i class="fas fa-paint-brush"></i>
-                <span class="stat-number" id="count-prescolar">0</span>
-                <span class="stat-label">Preescolar</span>
+                <span class="stat-number" id="count-primaria_prescolar">0</span>
+                <span class="stat-label">Primaria/Preescolar</span>
               </div>
               <div class="stat-card" style="--stat-color: #10b981">
                 <i class="fas fa-flask"></i>
@@ -185,6 +173,27 @@
               <h3><i class="fas fa-search"></i> Resultados de Búsqueda</h3>
               <span class="result-count" id="resultCount">0 alumnos</span>
             </div>
+
+            <!-- FILTROS DE BÚSQUEDA -->
+            <div class="search-filters-bar" style="display:flex; gap:16px; margin-bottom:18px; flex-wrap:wrap; background:white; padding:16px; border-radius:12px; border:1px solid #e2e8f0; align-items:center; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+              <div style="display:flex; flex-direction:column; gap:4px; flex:1; min-width:180px;">
+                <label style="font-size:0.75rem; font-weight:600; color:#475569;"><i class="fas fa-layer-group" style="margin-right:4px;"></i>Nivel Educativo</label>
+                <select id="filterNivel" style="padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:0.88rem; background-color:white; color:#1e293b; outline:none; transition:border-color 0.2s;">
+                  <option value="todos">Todos los Niveles</option>
+                  <option value="primaria">Primaria</option>
+                  <option value="prescolar">Preescolar</option>
+                  <option value="bachillerato">Bachillerato</option>
+                </select>
+              </div>
+              <div style="display:flex; flex-direction:column; gap:4px; flex:1; min-width:180px;">
+                <label style="font-size:0.75rem; font-weight:600; color:#475569;"><i class="fas fa-calendar-alt" style="margin-right:4px;"></i>Año Académico</label>
+                <select id="filterAnio" style="padding:8px 12px; border:1px solid #cbd5e1; border-radius:8px; font-size:0.88rem; background-color:white; color:#1e293b; outline:none; transition:border-color 0.2s;">
+                  <option value="todos">Todos los Años</option>
+                  <!-- Dinámico -->
+                </select>
+              </div>
+            </div>
+
             <div class="table-container">
               <table class="student-table" id="searchResultsTable">
                 <thead>
@@ -242,8 +251,7 @@
           <h3><i class="fas fa-layer-group"></i> Niveles Educativos</h3>
           <p class="section-desc">Selecciona un nivel para ver sus alumnos</p>
           <div class="level-selector">
-            <button class="level-tab active" data-level="primaria">Primaria</button>
-            <button class="level-tab" data-level="prescolar">Preescolar</button>
+            <button class="level-tab active" data-level="primaria_prescolar">Primaria/Preescolar</button>
             <button class="level-tab" data-level="bachillerato">Bachillerato</button>
           </div>
           <div class="table-container">
@@ -270,107 +278,219 @@
   </div>
 
   <!-- ADD STUDENT MODAL -->
-  <div class="modal-overlay" id="addStudentModal">
-    <div class="modal" style="max-width:700px;max-height:90vh;overflow-y:auto;">
-      <div class="modal-header">
-        <h3><i class="fas fa-user-plus"></i> Agregar Alumno</h3>
-        <button class="modal-close" id="closeModal">&times;</button>
+  <!-- PANTALLA AGREGAR ALUMNO (ventana completa) -->
+  <div id="addStudentScreen" style="display:none;position:fixed;inset:0;background:#f1f5f9;z-index:1000;overflow-y:auto;">
+    <div style="max-width:860px;margin:0 auto;padding:32px 24px 60px;">
+
+      <!-- Header -->
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:32px;">
+        <button onclick="closeAddStudentScreen()" style="background:white;border:1px solid #e2e8f0;color:#374151;padding:10px 16px;border-radius:10px;cursor:pointer;font-size:0.9rem;display:flex;align-items:center;gap:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+          <i class="fas fa-arrow-left"></i> Volver
+        </button>
+        <div>
+          <h2 style="margin:0;color:#1e293b;font-size:1.5rem;font-weight:700;"><i class="fas fa-user-plus" style="color:#4f46e5;margin-right:10px;"></i>Registrar Nuevo Alumno</h2>
+          <p style="margin:4px 0 0;color:#64748b;font-size:0.88rem;">Complete todos los datos del estudiante</p>
+        </div>
       </div>
-      <form id="studentForm" class="modal-form">
-        <div class="form-grid">
-          <div class="form-group">
-            <label>Nombre</label>
-            <input type="text" id="sName" placeholder="Nombre del alumno" autocomplete="off" required>
-          </div>
-          <div class="form-group">
-            <label>Apellido</label>
-            <input type="text" id="sLastName" placeholder="Apellido del alumno" autocomplete="off" required>
-          </div>
-          <div class="form-group">
-            <label>Nivel</label>
-            <select id="sLevel">
-              <option value="primaria">Primaria</option>
-              <option value="prescolar">Preescolar</option>
-              <option value="bachillerato">Bachillerato</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Cédula</label>
-            <input type="text" id="sId" placeholder="Ej: 12345678" required>
-          </div>
-          <div class="form-group">
-            <label>Tipo de Estudiante</label>
-            <select id="sTipo">
-              <option value="Regular">Alumno Regular</option>
-              <option value="Egresado">Estudiante Egresado</option>
-              <option value="Nuevo Ingreso">Nuevo Ingreso</option>
-            </select>
-          </div>
-          <div class="form-group" id="sIngresoPeriodoGroup" style="display: none;">
-            <label>Año a Cursar</label>
-            <select id="sIngresoPeriodo">
-              <!-- Se llenará dinámicamente -->
-            </select>
+
+      <form id="studentForm">
+
+        <!-- SECCIÓN 1: Datos del alumno -->
+        <div style="background:white;border-radius:16px;padding:28px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,0.07);">
+          <h3 style="margin:0 0 20px;color:#374151;font-size:1rem;font-weight:600;display:flex;align-items:center;gap:8px;">
+            <span style="background:#ede9fe;color:#4f46e5;width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:0.85rem;">1</span>
+            Datos del Estudiante
+          </h3>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Nombre</label>
+              <input type="text" id="sName" placeholder="Nombre del alumno" autocomplete="off" required>
+            </div>
+            <div class="form-group">
+              <label>Apellido</label>
+              <input type="text" id="sLastName" placeholder="Apellido del alumno" autocomplete="off" required>
+            </div>
+            <div class="form-group">
+              <label>Cédula</label>
+              <input type="text" id="sId" placeholder="Ej: 12345678" required>
+            </div>
+            <div class="form-group">
+              <label>Nivel</label>
+              <select id="sLevel"></select>
+            </div>
+            <div class="form-group">
+              <label>Tipo de Estudiante</label>
+              <select id="sTipo">
+                <option value="Regular">Alumno Regular</option>
+                <option value="Egresado">Estudiante Egresado</option>
+                <option value="Nuevo Ingreso">Nuevo Ingreso</option>
+              </select>
+            </div>
+            <div class="form-group" id="sIngresoPeriodoGroup">
+              <label>Año a Cursar</label>
+              <select id="sIngresoPeriodo"><!-- Dinámico --></select>
+            </div>
           </div>
         </div>
 
-        <!-- SECCIÓN DE NOTAS -->
-        <div id="notasSection" style="margin-top:20px;">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-            <i class="fas fa-folder-open" style="color:#4f46e5;font-size:1.1rem;"></i>
-            <h4 style="margin:0;color:#374151;font-size:1rem;">Archivos de Notas <span style="font-weight:400;color:#9ca3af;font-size:0.85rem;">(opcional)</span></h4>
-          </div>
-          <div id="notasFilesGrid" style="display:flex;flex-direction:column;gap:10px;">
-            <!-- Generado dinámicamente según el nivel -->
+        <!-- SECCIÓN 2: Dirección de vivienda -->
+        <div style="background:white;border-radius:16px;padding:28px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,0.07);">
+          <h3 style="margin:0 0 20px;color:#374151;font-size:1rem;font-weight:600;display:flex;align-items:center;gap:8px;">
+            <span style="background:#dcfce7;color:#16a34a;width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:0.85rem;">2</span>
+            Dirección de Vivienda <span style="font-weight:400;color:#9ca3af;font-size:0.82rem;margin-left:6px;">(opcional)</span>
+          </h3>
+          <div class="form-grid">
+            <div class="form-group" style="grid-column:1/-1;">
+              <label>Dirección</label>
+              <input type="text" id="sDireccion" placeholder="Calle, urbanización, sector..." autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label>Ciudad / Municipio</label>
+              <input type="text" id="sCiudad" placeholder="Ciudad" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label>Estado / Provincia</label>
+              <input type="text" id="sEstadoResidencia" placeholder="Estado o provincia" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label>Teléfono de casa</label>
+              <input type="text" id="sTelefonoCasa" placeholder="Ej: 0212-1234567" autocomplete="off">
+            </div>
           </div>
         </div>
 
-        <div class="form-actions" style="margin-top:24px;">
-          <button type="button" class="btn-cancel" id="cancelModalBtn">Cancelar</button>
-          <button type="submit" class="btn-submit" id="saveStudentBtn">
+        <!-- SECCIÓN 3: Familiares -->
+        <div style="background:white;border-radius:16px;padding:28px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,0.07);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <h3 style="margin:0;color:#374151;font-size:1rem;font-weight:600;display:flex;align-items:center;gap:8px;">
+              <span style="background:#fef3c7;color:#d97706;width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:0.85rem;">3</span>
+              Familiares / Representantes <span style="font-weight:400;color:#9ca3af;font-size:0.82rem;margin-left:6px;">(opcional)</span>
+            </h3>
+            <button type="button" onclick="addFamiliarRow()" style="background:#4f46e5;color:white;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:0.85rem;display:flex;align-items:center;gap:6px;">
+              <i class="fas fa-plus"></i> Agregar Familiar
+            </button>
+          </div>
+          <div id="familiaresContainer" style="display:flex;flex-direction:column;gap:12px;">
+            <p style="color:#9ca3af;font-size:0.88rem;text-align:center;padding:16px 0;" id="noFamiliaresMsg">Haz clic en "Agregar Familiar" para añadir un representante.</p>
+          </div>
+        </div>
+
+        <!-- SECCIÓN 4: Archivos de notas -->
+        <div style="background:white;border-radius:16px;padding:28px;margin-bottom:24px;box-shadow:0 1px 4px rgba(0,0,0,0.07);">
+          <h3 style="margin:0 0 20px;color:#374151;font-size:1rem;font-weight:600;display:flex;align-items:center;gap:8px;">
+            <span style="background:#fee2e2;color:#dc2626;width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:0.85rem;">4</span>
+            Archivos de Notas <span style="font-weight:400;color:#9ca3af;font-size:0.82rem;margin-left:6px;">(opcional)</span>
+          </h3>
+          <div id="notasFilesGrid" style="display:flex;flex-direction:column;gap:10px;"></div>
+        </div>
+
+        <!-- BOTONES -->
+        <div style="display:flex;justify-content:flex-end;gap:12px;">
+          <button type="button" onclick="closeAddStudentScreen()" id="cancelModalBtn" style="background:white;border:1px solid #e2e8f0;color:#374151;padding:12px 28px;border-radius:10px;cursor:pointer;font-size:0.95rem;">
+            Cancelar
+          </button>
+          <button type="submit" id="saveStudentBtn" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:white;border:none;padding:12px 32px;border-radius:10px;cursor:pointer;font-size:0.95rem;font-weight:600;display:flex;align-items:center;gap:8px;box-shadow:0 4px 14px rgba(79,70,229,0.35);">
             <i class="fas fa-save"></i> Guardar Alumno
           </button>
         </div>
+
       </form>
     </div>
   </div>
 
-  <!-- PERFIL ALUMNO MODAL -->
-  <div class="modal-overlay" id="perfilModal">
-    <div class="modal" style="max-width: 680px; max-height: 90vh; overflow-y: auto;">
-      <div class="modal-header">
-        <h3><i class="fas fa-user-circle"></i> Perfil del Alumno</h3>
-        <button class="modal-close" id="closePerfilModal">&times;</button>
-      </div>
-      <div id="perfilBody" style="padding: 24px;">
-        <!-- Datos del alumno -->
-        <div id="perfilDatos" style="display:flex;align-items:center;gap:20px;margin-bottom:28px;padding:20px;background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:14px;color:white;">
-          <div style="width:70px;height:70px;background:rgba(255,255,255,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2rem;flex-shrink:0;">
-            <i class="fas fa-user-graduate"></i>
+
+  <!-- PANTALLA PERFIL ALUMNO (ventana completa) -->
+  <div id="perfilScreen" style="display:none;position:fixed;inset:0;background:#f1f5f9;z-index:1000;overflow-y:auto;">
+    <div style="max-width:860px;margin:0 auto;padding:32px 24px 60px;">
+
+      <!-- Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;flex-wrap:wrap;gap:16px;">
+        <div style="display:flex;align-items:center;gap:16px;">
+          <button onclick="closePerfilScreen()" style="background:white;border:1px solid #e2e8f0;color:#374151;padding:10px 16px;border-radius:10px;cursor:pointer;font-size:0.9rem;display:flex;align-items:center;gap:8px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+            <i class="fas fa-arrow-left"></i> Volver al Listado
+          </button>
+          <div>
+            <h2 id="perfilNombreCompleto" style="margin:0;color:#1e293b;font-size:1.5rem;font-weight:700;"></h2>
+            <p style="margin:4px 0 0;color:#64748b;font-size:0.88rem;">Perfil y expediente académico del estudiante</p>
           </div>
-          <div style="flex:1;">
-            <h2 id="perfilNombreCompleto" style="margin:0 0 6px;font-size:1.4rem;"></h2>
-            <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:0.9rem;opacity:0.9;">
-              <span><i class="fas fa-id-card" style="margin-right:5px;"></i><span id="perfilCedula"></span></span>
-              <span><i class="fas fa-layer-group" style="margin-right:5px;"></i><span id="perfilNivel"></span></span>
-              <span><i class="fas fa-graduation-cap" style="margin-right:5px;"></i><span id="perfilTipo"></span></span>
+        </div>
+        <button id="perfilDeleteBtn" onclick="deleteFromProfile()" style="background:#ef4444;color:white;border:none;padding:10px 18px;border-radius:10px;cursor:pointer;font-size:0.9rem;display:flex;align-items:center;gap:8px;box-shadow:0 2px 4px rgba(239,68,68,0.2);font-weight:600;">
+          <i class="fas fa-trash"></i> Eliminar Estudiante
+        </button>
+      </div>
+
+      <!-- SECCIÓN 1: Datos Personales y Académicos -->
+      <div style="background:white;border-radius:16px;padding:28px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,0.07);">
+        <h3 style="margin:0 0 20px;color:#374151;font-size:1rem;font-weight:600;display:flex;align-items:center;gap:8px;">
+          <i class="fas fa-id-card" style="color:#4f46e5;"></i> Datos Personales y de Vivienda
+        </h3>
+        
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:20px;margin-bottom:24px;background:#f8fafc;padding:20px;border-radius:12px;border:1px solid #e2e8f0;">
+          <div>
+            <span style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;font-weight:600;display:block;">Cédula</span>
+            <span id="perfilCedula" style="font-size:1rem;font-weight:600;color:#1e293b;"></span>
+          </div>
+          <div>
+            <span style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;font-weight:600;display:block;">Nivel</span>
+            <span id="perfilNivel" style="font-size:1rem;font-weight:600;color:#1e293b;"></span>
+          </div>
+          <div>
+            <span style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;font-weight:600;display:block;">Tipo de Alumno</span>
+            <span id="perfilTipo" style="font-size:1rem;font-weight:600;color:#1e293b;"></span>
+          </div>
+          <div>
+            <span style="font-size:0.78rem;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;font-weight:600;display:block;">Estado</span>
+            <span id="perfilEstado" style="font-size:1.05rem;font-weight:600;"></span>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr;gap:16px;">
+          <div>
+            <strong style="color:#374151;font-size:0.85rem;display:block;margin-bottom:4px;">Dirección de Vivienda:</strong>
+            <span id="perfilDireccion" style="color:#4b5563;font-size:0.95rem;background:#f9fafb;padding:8px 12px;border-radius:8px;border:1px solid #e5e7eb;display:block;min-height:20px;"></span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+            <div>
+              <strong style="color:#374151;font-size:0.85rem;display:block;margin-bottom:4px;">Ciudad / Municipio:</strong>
+              <span id="perfilCiudad" style="color:#4b5563;font-size:0.95rem;background:#f9fafb;padding:8px 12px;border-radius:8px;border:1px solid #e5e7eb;display:block;min-height:20px;"></span>
+            </div>
+            <div>
+              <strong style="color:#374151;font-size:0.85rem;display:block;margin-bottom:4px;">Estado / Provincia:</strong>
+              <span id="perfilEstadoRes" style="color:#4b5563;font-size:0.95rem;background:#f9fafb;padding:8px 12px;border-radius:8px;border:1px solid #e5e7eb;display:block;min-height:20px;"></span>
+            </div>
+            <div>
+              <strong style="color:#374151;font-size:0.85rem;display:block;margin-bottom:4px;">Teléfono Casa:</strong>
+              <span id="perfilTelefono" style="color:#4b5563;font-size:0.95rem;background:#f9fafb;padding:8px 12px;border-radius:8px;border:1px solid #e5e7eb;display:block;min-height:20px;"></span>
             </div>
           </div>
-          <button id="perfilDeleteBtn" onclick="deleteFromProfile()" style="background:rgba(239,68,68,0.8);color:white;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:0.85rem;flex-shrink:0;">
-            <i class="fas fa-trash"></i> Eliminar
-          </button>
         </div>
-        <!-- Archivos de notas -->
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-          <h4 style="margin:0;color:#374151;"><i class="fas fa-folder-open" style="color:#4f46e5;margin-right:8px;"></i>Archivos de Notas por Año</h4>
-          <button id="btnEditAnios" onclick="toggleEditAnios()" style="background:#f59e0b;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;display:none;">
+      </div>
+
+      <!-- SECCIÓN 2: Familiares / Representantes -->
+      <div style="background:white;border-radius:16px;padding:28px;margin-bottom:20px;box-shadow:0 1px 4px rgba(0,0,0,0.07);">
+        <h3 style="margin:0 0 20px;color:#374151;font-size:1rem;font-weight:600;display:flex;align-items:center;gap:8px;">
+          <i class="fas fa-users" style="color:#d97706;"></i> Familiares y Representantes Registrados
+        </h3>
+        <div id="perfilFamiliaresList" style="display:flex;flex-direction:column;gap:12px;">
+          <!-- Se cargan dinámicamente -->
+        </div>
+      </div>
+
+      <!-- SECCIÓN 3: Calificaciones y Expediente -->
+      <div style="background:white;border-radius:16px;padding:28px;box-shadow:0 1px 4px rgba(0,0,0,0.07);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+          <h3 style="margin:0;color:#374151;font-size:1rem;font-weight:600;display:flex;align-items:center;gap:8px;">
+            <i class="fas fa-folder-open" style="color:#10b981;"></i> Archivos de Notas por Periodo / Año
+          </h3>
+          <button id="btnEditAnios" onclick="toggleEditAnios()" style="background:#f59e0b;color:white;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:0.88rem;font-weight:600;display:flex;align-items:center;gap:6px;box-shadow:0 2px 4px rgba(245,158,11,0.2);">
             <i class="fas fa-edit"></i> Editar Años
           </button>
         </div>
         <div id="perfilNotas" style="display:flex;flex-direction:column;gap:12px;">
-          <!-- Dynamic notes -->
+          <!-- Calificaciones dinámicas -->
         </div>
       </div>
+
     </div>
   </div>
 

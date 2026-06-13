@@ -2,10 +2,15 @@
 let students = [];
 
 let currentUser = null;
-let currentLevel = 'primaria';
+let currentLevel = 'primaria_prescolar';
 let currentTab = 'inicio';
 
-const levelNames = { primaria: 'Primaria', prescolar: 'Preescolar', bachillerato: 'Bachillerato' };
+const levelNames = {
+  primaria: 'Primaria',
+  prescolar: 'Preescolar',
+  primaria_prescolar: 'Primaria/Preescolar',
+  bachillerato: 'Bachillerato'
+};
 
 // ============ DOM REFS ============
 const $ = id => document.getElementById(id);
@@ -26,7 +31,7 @@ const levelsEmpty = $('levelsEmpty');
 const resultCount = $('resultCount');
 const currentLevelSpan = $('currentLevel');
 const dashboardTitle = $('dashboardTitle');
-const modal = $('addStudentModal');
+const addStudentScreen = $('addStudentScreen');
 const studentForm = $('studentForm');
 const hamburger = $('hamburger');
 const sidebar = $('sidebar');
@@ -63,7 +68,7 @@ loginForm.addEventListener('submit', async (e) => {
 
 function loginSuccess() {
   loginError.classList.remove('show');
-  currentLevel = currentUser.isAdmin ? 'primaria' : currentUser.level;
+  currentLevel = currentUser.isAdmin ? 'primaria_prescolar' : currentUser.level;
   showScreen('dashboard');
   currentTab = 'inicio';
   updateSidebarUser();
@@ -132,6 +137,38 @@ function updateSidebarUser() {
     : levelNames[currentUser.level];
 }
 
+function populateStudentLevelDropdown() {
+  const sLevel = $('sLevel');
+  if (!sLevel) return;
+  const isAdmin = currentUser.isAdmin;
+  const userLvl = currentUser.level;
+  
+  let options = '';
+  if (isAdmin) {
+    options = `
+      <option value="prescolar">Preescolar</option>
+      <option value="primaria">Primaria</option>
+      <option value="bachillerato">Bachillerato</option>
+    `;
+  } else if (userLvl === 'primaria_prescolar') {
+    options = `
+      <option value="prescolar">Preescolar</option>
+      <option value="primaria">Primaria</option>
+    `;
+  } else {
+    options = `
+      <option value="bachillerato">Bachillerato</option>
+    `;
+  }
+  sLevel.innerHTML = options;
+  
+  if (currentLevel === 'primaria_prescolar') {
+    sLevel.value = 'primaria';
+  } else {
+    sLevel.value = currentLevel;
+  }
+}
+
 function applyPermissions() {
   const isAdmin = currentUser.isAdmin;
   const userLvl = currentUser.level;
@@ -152,7 +189,7 @@ function applyPermissions() {
   });
 
   // Filtrar tarjetas de estadísticas
-  ['primaria', 'prescolar', 'bachillerato'].forEach(lvl => {
+  ['primaria_prescolar', 'bachillerato'].forEach(lvl => {
     const statCount = document.getElementById('count-' + lvl);
     if (statCount) {
       const card = statCount.closest('.stat-card');
@@ -166,16 +203,8 @@ function applyPermissions() {
     }
   });
 
-  // Bloquear el selector de nivel al agregar un alumno
-  const sLevel = $('sLevel');
-  if (sLevel) {
-    if (!isAdmin) {
-      sLevel.value = userLvl;
-      sLevel.disabled = true;
-    } else {
-      sLevel.disabled = false;
-    }
-  }
+  // Configurar el selector de nivel al agregar un alumno
+  populateStudentLevelDropdown();
 }
 
 // ============ DASHBOARD ============
@@ -193,6 +222,7 @@ async function renderDashboard() {
   dashboardTitle.textContent = currentTab === 'inicio' ? 'Inicio' : currentTab === 'alumnos' ? 'Alumnos' : 'Niveles';
 
   students = await eel.get_alumnos(null)();
+  populateFilterAnios();
 
   updateCounts();
   renderStudents();
@@ -205,11 +235,14 @@ async function renderDashboard() {
 }
 
 function updateCounts() {
-  ['primaria', 'prescolar', 'bachillerato'].forEach(level => {
-    const count = students.filter(s => s.level === level).length;
-    const el = document.getElementById('count-' + level);
-    if (el) el.textContent = count;
-  });
+  const countPrimariaPrescolar = students.filter(s => s.level === 'primaria' || s.level === 'prescolar').length;
+  const countBachillerato = students.filter(s => s.level === 'bachillerato').length;
+  
+  const elPP = document.getElementById('count-primaria_prescolar');
+  if (elPP) elPP.textContent = countPrimariaPrescolar;
+  
+  const elBach = document.getElementById('count-bachillerato');
+  if (elBach) elBach.textContent = countBachillerato;
 }
 
 // ============ WELCOME LEVEL BTNS ============
@@ -224,10 +257,13 @@ document.querySelectorAll('.welcome-level-btn').forEach(btn => {
 // ============ STUDENTS TABLE ============
 function renderStudents() {
   const q = searchInput.value.trim().toLowerCase();
-  const filtered = students.filter(s => 
-    s.level === currentLevel &&
-    (!q || s.nombre.toLowerCase().includes(q) || s.apellido.toLowerCase().includes(q) || s.cedula.toLowerCase().includes(q) || (s.anios && s.anios.some(a => a.toLowerCase().includes(q))))
-  );
+  const filtered = students.filter(s => {
+    const matchesLevel = (currentLevel === 'primaria_prescolar') 
+      ? (s.level === 'primaria' || s.level === 'prescolar') 
+      : (s.level === currentLevel);
+    return matchesLevel &&
+      (!q || s.nombre.toLowerCase().includes(q) || s.apellido.toLowerCase().includes(q) || s.cedula.toLowerCase().includes(q) || (s.anios && s.anios.some(a => a.toLowerCase().includes(q))));
+  });
 
   if (filtered.length === 0) {
     studentsBody.innerHTML = '';
@@ -242,7 +278,7 @@ function renderStudents() {
       <td>${levelNames[s.level]}</td>
       <td>${s.cedula}</td>
       <td>
-        <button onclick="openPerfil(${s.id})" style="background:none;border:none;cursor:pointer;color:#4f46e5;font-size:1.2rem;" title="Ver perfil"><i class="fas fa-eye"></i></button>
+        <button onclick="openPerfil(${s.id})" style="background:none;border:none;cursor:pointer;color:#4f46e5;font-size:1.2rem;" title="Ver perfil"><i class="fa-solid fa-eye"></i></button>
       </td>
     </tr>
   `).join('');
@@ -252,22 +288,55 @@ function renderStudents() {
   });
 }
 
+function populateFilterAnios() {
+  const select = $('filterAnio');
+  if (!select) return;
+  const currentVal = select.value;
+  
+  const yearsSet = new Set();
+  students.forEach(s => {
+    if (s.anios) {
+      s.anios.forEach(yr => {
+        if (yr && yr.trim()) yearsSet.add(yr.trim());
+      });
+    }
+  });
+  
+  const sortedYears = Array.from(yearsSet).sort((a,b) => b - a);
+  select.innerHTML = '<option value="todos">Todos los Años</option>' + 
+    sortedYears.map(yr => `<option value="${yr}">${yr}</option>`).join('');
+  
+  if (currentVal && sortedYears.includes(currentVal)) {
+    select.value = currentVal;
+  } else {
+    select.value = 'todos';
+  }
+}
+
 // ============ SEARCH ============
 function handleSearch() {
   const q = searchInput.value.trim().toLowerCase();
+  const lvlFilter = $('filterNivel') ? $('filterNivel').value : 'todos';
+  const yrFilter = $('filterAnio') ? $('filterAnio').value : 'todos';
 
-  if (!q) {
+  if (!q && lvlFilter === 'todos' && yrFilter === 'todos') {
     searchBody.innerHTML = '';
     searchEmpty.style.display = 'block';
     searchEmpty.querySelector('p').textContent = 'Busca alumnos por nombre, apellido o matrícula';
     resultCount.textContent = '0 alumnos';
   } else {
-    const results = students.filter(s =>
-      s.nombre.toLowerCase().includes(q) ||
-      s.apellido.toLowerCase().includes(q) ||
-      s.cedula.toLowerCase().includes(q) ||
-      (s.anios && s.anios.some(a => a.toLowerCase().includes(q)))
-    );
+    const results = students.filter(s => {
+      const matchesQuery = !q ||
+        s.nombre.toLowerCase().includes(q) ||
+        s.apellido.toLowerCase().includes(q) ||
+        s.cedula.toLowerCase().includes(q) ||
+        (s.anios && s.anios.some(a => a.toLowerCase().includes(q)));
+        
+      const matchesLvl = lvlFilter === 'todos' || s.level === lvlFilter;
+      const matchesYr = yrFilter === 'todos' || (s.anios && s.anios.includes(yrFilter));
+      
+      return matchesQuery && matchesLvl && matchesYr;
+    });
 
     resultCount.textContent = `${results.length} alumno${results.length !== 1 ? 's' : ''}`;
 
@@ -284,7 +353,7 @@ function handleSearch() {
           <td>${levelNames[s.level]}</td>
           <td>${s.cedula}</td>
           <td>
-            <button onclick="openPerfil(${s.id})" style="background:none;border:none;cursor:pointer;color:#4f46e5;font-size:1.2rem;" title="Ver perfil"><i class="fas fa-eye"></i></button>
+            <button onclick="openPerfil(${s.id})" style="background:none;border:none;cursor:pointer;color:#4f46e5;font-size:1.2rem;" title="Ver perfil"><i class="fa-solid fa-eye"></i></button>
           </td>
         </tr>
       `).join('');
@@ -298,13 +367,25 @@ function handleSearch() {
 
 searchInput.addEventListener('input', handleSearch);
 
+const filterNivel = $('filterNivel');
+if (filterNivel) {
+  filterNivel.addEventListener('change', handleSearch);
+}
+const filterAnio = $('filterAnio');
+if (filterAnio) {
+  filterAnio.addEventListener('change', handleSearch);
+}
+
 // ============ LEVELS TABLE ============
 function renderLevelsTable() {
   const q = searchInput.value.trim().toLowerCase();
-  const filtered = students.filter(s => 
-    s.level === currentLevel &&
-    (!q || s.nombre.toLowerCase().includes(q) || s.apellido.toLowerCase().includes(q) || s.cedula.toLowerCase().includes(q) || (s.anios && s.anios.some(a => a.toLowerCase().includes(q))))
-  );
+  const filtered = students.filter(s => {
+    const matchesLevel = (currentLevel === 'primaria_prescolar') 
+      ? (s.level === 'primaria' || s.level === 'prescolar') 
+      : (s.level === currentLevel);
+    return matchesLevel &&
+      (!q || s.nombre.toLowerCase().includes(q) || s.apellido.toLowerCase().includes(q) || s.cedula.toLowerCase().includes(q) || (s.anios && s.anios.some(a => a.toLowerCase().includes(q))));
+  });
 
   if (filtered.length === 0) {
     levelsBody.innerHTML = '';
@@ -318,7 +399,7 @@ function renderLevelsTable() {
       <td>${s.apellido}</td>
       <td>${s.cedula}</td>
       <td>
-        <button onclick="openPerfil(${s.id})" style="background:none;border:none;cursor:pointer;color:#4f46e5;font-size:1.2rem;" title="Ver perfil"><i class="fas fa-eye"></i></button>
+        <button onclick="openPerfil(${s.id})" style="background:none;border:none;cursor:pointer;color:#4f46e5;font-size:1.2rem;" title="Ver perfil"><i class="fa-solid fa-eye"></i></button>
       </td>
     </tr>
   `).join('');
@@ -360,17 +441,28 @@ $('logoutBtn').addEventListener('click', () => {
   document.querySelector('.auth-tab[data-form="login"]').click();
 });
 
-// ============ MODAL ============
-$('addStudentBtn').addEventListener('click', () => {
-  modal.classList.add('show');
+// ============ ADD STUDENT SCREEN ============
+function openAddStudentScreen() {
+  addStudentScreen.style.display = 'block';
   studentForm.reset();
-  $('sLevel').value = currentLevel;
+  populateStudentLevelDropdown();
   $('sId').value = '';
   $('sTipo').value = 'Regular';
-  $('sIngresoPeriodoGroup').style.display = 'none';
+  $('sIngresoPeriodoGroup').style.display = 'block';
   populateIngresoPeriodoDropdown();
-  renderNotasModal(currentLevel);
-});
+  renderNotasModal($('sLevel').value);
+  // Reset familiares
+  const cont = $('familiaresContainer');
+  cont.innerHTML = '<p style="color:#9ca3af;font-size:0.88rem;text-align:center;padding:16px 0;" id="noFamiliaresMsg">Haz clic en "Agregar Familiar" para añadir un representante.</p>';
+  // Scroll to top
+  addStudentScreen.scrollTop = 0;
+}
+
+function closeAddStudentScreen() {
+  addStudentScreen.style.display = 'none';
+}
+
+$('addStudentBtn').addEventListener('click', openAddStudentScreen);
 
 // Re-render notes when level changes inside the modal
 $('sLevel').addEventListener('change', function() {
@@ -380,7 +472,7 @@ $('sLevel').addEventListener('change', function() {
 
 // Handle type changes inside the modal
 $('sTipo').addEventListener('change', function() {
-  if (this.value === 'Nuevo Ingreso') {
+  if (this.value === 'Nuevo Ingreso' || this.value === 'Regular') {
     $('sIngresoPeriodoGroup').style.display = 'block';
     populateIngresoPeriodoDropdown();
   } else {
@@ -411,21 +503,24 @@ function renderNotasModal(nivel) {
   let periodsToShow = [];
   if (tipo === 'Egresado') {
     periodsToShow = ['Notas Totales'];
-  } else if (tipo === 'Nuevo Ingreso') {
+  } else if (tipo === 'Nuevo Ingreso' || tipo === 'Regular') {
     const idx = perList.indexOf(ingresoPeriodo);
     if (idx > 0) {
-      periodsToShow = ['Notas del Colegio Anterior'];
+      periodsToShow = [perList[idx - 1]];
     } else {
-      periodsToShow = [];
+      const seqIdx = sequenceOfPeriodos.indexOf(ingresoPeriodo);
+      if (seqIdx > 0) {
+        periodsToShow = [sequenceOfPeriodos[seqIdx - 1]];
+      } else {
+        periodsToShow = [];
+      }
     }
-  } else {
-    periodsToShow = perList;
   }
   
   if (periodsToShow.length === 0) {
     grid.innerHTML = `
       <div style="padding:15px;text-align:center;color:#6b7280;background:#f3f4f6;border-radius:10px;font-size:0.9rem;">
-        No hay notas de años anteriores para adjuntar en este nivel de ingreso.
+        No se requieren notas del año anterior para este grado.
       </div>`;
     return;
   }
@@ -464,9 +559,7 @@ function renderNotasModal(nivel) {
   });
 }
 
-$('closeModal').addEventListener('click', () => modal.classList.remove('show'));
-$('cancelModalBtn').addEventListener('click', () => modal.classList.remove('show'));
-modal.addEventListener('click', (e) => { if (e.target === modal) modal.classList.remove('show'); });
+// No close/cancel for modal anymore — handled by closeAddStudentScreen()
 
 studentForm.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -481,9 +574,13 @@ studentForm.addEventListener('submit', async (e) => {
   if (!newStudent.nombre || !newStudent.apellido || !newStudent.cedula) return;
 
   const tipo = $('sTipo').value;
-  const ingreso_periodo = (tipo === 'Nuevo Ingreso') ? $('sIngresoPeriodo').value : null;
+  const ingreso_periodo = (tipo === 'Nuevo Ingreso' || tipo === 'Regular') ? $('sIngresoPeriodo').value : null;
+  const direccion = $('sDireccion').value.trim() || null;
+  const ciudad = $('sCiudad').value.trim() || null;
+  const estado_residencia = $('sEstadoResidencia').value.trim() || null;
+  const telefono_casa = $('sTelefonoCasa').value.trim() || null;
 
-  // Collect files before saving (FileReader must run in sync context)
+  // Collect files before saving
   const fileInputs = $('notasFilesGrid').querySelectorAll('input[type="file"]');
   const filesToUpload = [];
   for (const inp of fileInputs) {
@@ -494,12 +591,28 @@ studentForm.addEventListener('submit', async (e) => {
     }
   }
 
-  // Disable button while saving
+  // Collect familiares
+  const familiarRows = $('familiaresContainer').querySelectorAll('.familiar-row');
+  const familiares = [];
+  familiarRows.forEach(row => {
+    const inputs = row.querySelectorAll('input, select');
+    familiares.push({
+      nombre:     inputs[0] ? inputs[0].value.trim() : '',
+      apellido:   inputs[1] ? inputs[1].value.trim() : '',
+      cedula:     inputs[2] ? inputs[2].value.trim() : '',
+      telefono:   inputs[3] ? inputs[3].value.trim() : '',
+      parentesco: inputs[4] ? inputs[4].value : 'Padre/Madre'
+    });
+  });
+
   const saveBtn = $('saveStudentBtn');
   saveBtn.disabled = true;
   saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
 
-  const response = await eel.add_alumno(newStudent.cedula, newStudent.nombre, newStudent.apellido, newStudent.nivel, tipo, ingreso_periodo)();
+  const response = await eel.add_alumno(
+    newStudent.cedula, newStudent.nombre, newStudent.apellido, newStudent.nivel,
+    tipo, ingreso_periodo, direccion, ciudad, estado_residencia, telefono_casa
+  )();
 
   if (!response.success) {
     saveBtn.disabled = false;
@@ -508,30 +621,76 @@ studentForm.addEventListener('submit', async (e) => {
     return;
   }
 
+  const alumnoId = response.id;
+
+  // Save familiares
+  if (familiares.length > 0 && alumnoId) {
+    await eel.save_familiares(alumnoId, familiares)();
+  }
+
   // Upload files if any
-  if (filesToUpload.length > 0) {
-    // Reload to get new student's id
-    const updatedStudents = await eel.get_alumnos(null)();
-    const saved = updatedStudents.find(s => s.cedula === newStudent.cedula);
-    if (saved) {
-      for (const item of filesToUpload) {
-        await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = async function() {
-            await eel.upload_nota(saved.id, item.periodo, reader.result, item.file.name, item.anio)();
-            resolve();
-          };
-          reader.readAsDataURL(item.file);
-        });
-      }
+  if (filesToUpload.length > 0 && alumnoId) {
+    for (const item of filesToUpload) {
+      await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = async function() {
+          await eel.upload_nota(alumnoId, item.periodo, reader.result, item.file.name, item.anio)();
+          resolve();
+        };
+        reader.readAsDataURL(item.file);
+      });
     }
   }
 
   saveBtn.disabled = false;
   saveBtn.innerHTML = '<i class="fas fa-save"></i> Guardar Alumno';
-  modal.classList.remove('show');
+  closeAddStudentScreen();
   renderDashboard();
 });
+
+let familiarCounter = 0;
+function addFamiliarRow() {
+  const msg = $('noFamiliaresMsg');
+  if (msg) msg.remove();
+  const cont = $('familiaresContainer');
+  familiarCounter++;
+  const div = document.createElement('div');
+  div.className = 'familiar-row';
+  div.style.cssText = 'background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto;gap:10px;align-items:end;';
+  div.innerHTML = `
+    <div>
+      <label style="font-size:0.8rem;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Nombre</label>
+      <input type="text" placeholder="Nombre" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:0.88rem;box-sizing:border-box;">
+    </div>
+    <div>
+      <label style="font-size:0.8rem;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Apellido</label>
+      <input type="text" placeholder="Apellido" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:0.88rem;box-sizing:border-box;">
+    </div>
+    <div>
+      <label style="font-size:0.8rem;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Cédula</label>
+      <input type="text" placeholder="Cédula" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:0.88rem;box-sizing:border-box;">
+    </div>
+    <div>
+      <label style="font-size:0.8rem;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Teléfono</label>
+      <input type="text" placeholder="Número de teléfono" style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:0.88rem;box-sizing:border-box;">
+    </div>
+    <div>
+      <label style="font-size:0.8rem;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Parentesco</label>
+      <select style="width:100%;padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:0.88rem;background:white;">
+        <option>Padre/Madre</option>
+        <option>Abuelo/a</option>
+        <option>Tío/a</option>
+        <option>Hermano/a</option>
+        <option>Tutor</option>
+        <option>Otro</option>
+      </select>
+    </div>
+    <button type="button" onclick="this.closest('.familiar-row').remove()" style="background:#fee2e2;color:#dc2626;border:none;padding:8px 10px;border-radius:8px;cursor:pointer;">
+      <i class="fas fa-trash"></i>
+    </button>
+  `;
+  cont.appendChild(div);
+}
 
 // ============ DELETE ============
 async function deleteStudent(id) {
@@ -544,17 +703,25 @@ async function deleteStudent(id) {
   }
 }
 
-// ============ PERFIL MODAL ============
-const perfilModal = $('perfilModal');
-const closePerfilModal = $('closePerfilModal');
-perfilModal.addEventListener('click', (e) => { if (e.target === perfilModal) perfilModal.classList.remove('show'); });
-closePerfilModal.addEventListener('click', () => perfilModal.classList.remove('show'));
+// ============ PERFIL SCREEN ============
+const perfilScreen = $('perfilScreen');
+
+function closePerfilScreen() {
+  perfilScreen.style.display = 'none';
+  perfilAlumnoActual = null;
+}
 
 const periodos = {
   'primaria': ['1er Grado', '2do Grado', '3er Grado', '4to Grado', '5to Grado', '6to Grado'],
   'prescolar': ['2do Nivel', '3er Nivel'],
   'bachillerato': ['1er A\u00f1o', '2do A\u00f1o', '3er A\u00f1o', '4to A\u00f1o', '5to A\u00f1o']
 };
+
+const sequenceOfPeriodos = [
+  '2do Nivel', '3er Nivel',
+  '1er Grado', '2do Grado', '3er Grado', '4to Grado', '5to Grado', '6to Grado',
+  '1er A\u00f1o', '2do A\u00f1o', '3er A\u00f1o', '4to A\u00f1o', '5to A\u00f1o'
+];
 
 let perfilAlumnoActual = null;
 
@@ -567,12 +734,63 @@ async function openPerfil(alumnoId) {
   // Llenar datos del perfil
   $('perfilNombreCompleto').textContent = alumno.nombre + ' ' + alumno.apellido;
   $('perfilCedula').textContent = alumno.cedula;
-  $('perfilNivel').textContent = levelNames[alumno.level];
+  $('perfilNivel').textContent = levelNames[alumno.level] || alumno.level;
   $('perfilTipo').textContent = alumno.tipo === 'Nuevo Ingreso' 
     ? `Nuevo Ingreso (${alumno.ingreso_periodo})` 
     : (alumno.tipo || 'Regular');
   
-  perfilModal.classList.add('show');
+  const estadoEl = $('perfilEstado');
+  estadoEl.textContent = alumno.status || 'Activo';
+  if (alumno.status === 'Activo') {
+    estadoEl.style.color = '#10b981';
+  } else {
+    estadoEl.style.color = '#f59e0b';
+  }
+
+  // Vivienda
+  $('perfilDireccion').textContent = alumno.direccion || 'No registrada';
+  $('perfilCiudad').textContent = alumno.ciudad || 'No registrada';
+  $('perfilEstadoRes').textContent = alumno.estado_residencia || 'No registrado';
+  $('perfilTelefono').textContent = alumno.telefono_casa || 'No registrado';
+
+  // Render familiares (se cargan del backend)
+  const famListEl = $('perfilFamiliaresList');
+  famListEl.innerHTML = '<p style="color:#6b7280;"><i class="fas fa-spinner fa-spin"></i> Cargando familiares...</p>';
+
+  eel.get_familiares(alumnoId)().then(famRes => {
+    if (famRes.success && famRes.familiares && famRes.familiares.length > 0) {
+      famListEl.innerHTML = famRes.familiares.map(f => `
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px;display:grid;grid-template-columns:repeat(auto-fit, minmax(140px, 1fr));gap:12px;align-items:center;">
+          <div>
+            <span style="font-size:0.75rem;text-transform:uppercase;color:#64748b;font-weight:600;display:block;">Familiar / Parentesco</span>
+            <strong style="color:#1e293b;font-size:0.9rem;">${f.parentesco}</strong>
+          </div>
+          <div>
+            <span style="font-size:0.75rem;text-transform:uppercase;color:#64748b;font-weight:600;display:block;">Nombre Completo</span>
+            <span style="color:#334155;font-size:0.9rem;">${f.nombre} ${f.apellido}</span>
+          </div>
+          <div>
+            <span style="font-size:0.75rem;text-transform:uppercase;color:#64748b;font-weight:600;display:block;">Cédula</span>
+            <span style="color:#334155;font-size:0.9rem;">${f.cedula || 'No registrada'}</span>
+          </div>
+          <div>
+            <span style="font-size:0.75rem;text-transform:uppercase;color:#64748b;font-weight:600;display:block;">Teléfono</span>
+            <span style="color:#334155;font-size:0.9rem;">${f.telefono || 'No registrado'}</span>
+          </div>
+        </div>
+      `).join('');
+    } else {
+      famListEl.innerHTML = `
+        <div style="padding:15px;text-align:center;color:#6b7280;background:#f3f4f6;border-radius:10px;font-size:0.9rem;">
+          No hay familiares ni representantes registrados para este alumno.
+        </div>`;
+    }
+  }).catch(err => {
+    famListEl.innerHTML = `<p style="color:#ef4444;font-size:0.9rem;">Error al cargar familiares</p>`;
+  });
+
+  perfilScreen.style.display = 'block';
+  perfilScreen.scrollTop = 0;
   
   // Cargar notas
   const notasContainer = $('perfilNotas');
@@ -587,11 +805,19 @@ async function openPerfil(alumnoId) {
   
   if (alumno.tipo === 'Egresado') {
     perList = ['Notas Totales'];
-  } else if (alumno.tipo === 'Nuevo Ingreso') {
+  } else if (alumno.tipo === 'Nuevo Ingreso' || alumno.tipo === 'Regular') {
     const fullList = periodos[alumno.level] || [];
     entryIdx = fullList.indexOf(alumno.ingreso_periodo);
-    if (entryIdx > 0) {
-      perList = ['Notas del Colegio Anterior', ...fullList.slice(entryIdx)];
+    
+    const seqIdx = sequenceOfPeriodos.indexOf(alumno.ingreso_periodo);
+    if (seqIdx > 0) {
+      const prevPeriod = sequenceOfPeriodos[seqIdx - 1];
+      if (!fullList.includes(prevPeriod)) {
+        perList = [prevPeriod, ...fullList];
+        entryIdx = 1;
+      } else {
+        perList = fullList;
+      }
     } else {
       perList = fullList;
     }
@@ -601,56 +827,127 @@ async function openPerfil(alumnoId) {
   
   notasContainer.innerHTML = '';
   let hasAnyNote = false;
-  for (let i = 0; i < perList.length; i++) {
-    const p = perList[i];
-    const notaInfo = notasSubidas[p];
-    const tieneNota = !!notaInfo;
-    if (tieneNota) hasAnyNote = true;
-    const nombreArchivo = tieneNota ? notaInfo.archivo : null;
-    const anio = tieneNota && notaInfo.anio ? ` (Año: ${notaInfo.anio})` : '';
 
-    let labelPrefix = '';
-    let badge = '';
+  // ——— For primaria/prescolar Regular/Nuevo Ingreso: show previous year note + current year upload ———
+  const isPriPre = (alumno.level === 'primaria' || alumno.level === 'prescolar') &&
+                   (alumno.tipo === 'Regular' || alumno.tipo === 'Nuevo Ingreso') &&
+                   alumno.ingreso_periodo;
+
+  if (isPriPre) {
+    // Previous year note (read-only view + year before in sequence)
+    const seqIdx2 = sequenceOfPeriodos.indexOf(alumno.ingreso_periodo);
+    const prevPeriod = seqIdx2 > 0 ? sequenceOfPeriodos[seqIdx2 - 1] : null;
     
-    if (p === 'Notas del Colegio Anterior') {
-      labelPrefix = ' <span style="background:#6b7280;color:white;padding:2px 6px;border-radius:4px;font-size:0.75rem;margin-left:8px;font-weight:normal;">Col. Anterior</span>';
-      badge = tieneNota
-        ? `<span style="color:#10b981;font-size:0.85em;"><i class="fas fa-check-circle"></i> ${nombreArchivo}${anio}</span>`
-        : '<span style="color:#9ca3af;font-size:0.85em;"><i class="fas fa-times-circle"></i> Sin archivo (Colegio Anterior)</span>';
-    } else if (alumno.tipo === 'Nuevo Ingreso' && p !== 'Notas del Colegio Anterior') {
-      labelPrefix = ' <span style="background:#4f46e5;color:white;padding:2px 6px;border-radius:4px;font-size:0.75rem;margin-left:8px;font-weight:normal;">En el colegio</span>';
-      badge = tieneNota
-        ? `<span style="color:#10b981;font-size:0.85em;"><i class="fas fa-check-circle"></i> ${nombreArchivo}${anio}</span>`
-        : '<span style="color:#ef4444;font-size:0.85em;"><i class="fas fa-exclamation-circle"></i> Falta por ver en el colegio</span>';
-    } else {
-      badge = tieneNota
-        ? `<span style="color:#10b981;font-size:0.85em;"><i class="fas fa-check-circle"></i> ${nombreArchivo}${anio}</span>`
+    if (prevPeriod) {
+      const prevNota = notasSubidas[prevPeriod];
+      const prevTiene = !!prevNota;
+      if (prevTiene) hasAnyNote = true;
+      const prevArchivo = prevTiene ? prevNota.archivo : null;
+      const prevAnio = prevTiene && prevNota.anio ? ` (Año: ${prevNota.anio})` : '';
+      const prevBadge = prevTiene
+        ? `<span style="color:#10b981;font-size:0.85em;"><i class="fas fa-check-circle"></i> ${prevArchivo}${prevAnio}</span>`
         : '<span style="color:#9ca3af;font-size:0.85em;"><i class="fas fa-times-circle"></i> Sin archivo</span>';
+      const prevVerBtn = prevTiene
+        ? `<button onclick="verArchivo(${alumnoId}, '${prevPeriod}')" style="background:#10b981;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;"><i class="fa-solid fa-eye"></i> Ver</button>`
+        : '';
+      
+      const prevRow = document.createElement('div');
+      prevRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;';
+      prevRow.innerHTML = `
+        <div>
+          <span style="font-weight:600;color:#374151;">${prevPeriod}
+            <span style="background:#6b7280;color:white;padding:2px 6px;border-radius:4px;font-size:0.75rem;margin-left:8px;font-weight:normal;">Año Anterior</span>
+          </span><br>
+          <small>${prevBadge}</small>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          ${prevVerBtn}
+          <input type="text" id="panio_${alumnoId}_${prevPeriod.replace(/[^a-zA-Z0-9]/g, '_')}" data-periodo="${prevPeriod}" placeholder="Año" style="width:70px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;" value="${prevTiene && prevNota.anio ? prevNota.anio : new Date().getFullYear()}" disabled class="anio-input">
+          <input type="file" id="pfile_${alumnoId}_${prevPeriod.replace(/[^a-zA-Z0-9]/g, '_')}" style="display:none;" onchange="uploadFileFromPerfil(${alumnoId}, '${prevPeriod}', this)">
+          <button onclick="document.getElementById('pfile_${alumnoId}_${prevPeriod.replace(/[^a-zA-Z0-9]/g, '_')}').click()" style="background:#4f46e5;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;">
+            <i class="fas fa-upload"></i> ${prevTiene ? 'Reemplazar' : 'Subir'}
+          </button>
+        </div>
+      `;
+      notasContainer.appendChild(prevRow);
     }
-    
-    const verBtn = tieneNota
-      ? `<button onclick="verArchivo(${alumnoId}, '${p}')" style="background:#10b981;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;">
-           <i class="fas fa-eye"></i> Ver
-         </button>`
+
+    // Current year note upload
+    const curPeriod = alumno.ingreso_periodo;
+    const curNota = notasSubidas[curPeriod];
+    const curTiene = !!curNota;
+    if (curTiene) hasAnyNote = true;
+    const curArchivo = curTiene ? curNota.archivo : null;
+    const curAnio = curTiene && curNota.anio ? ` (Año: ${curNota.anio})` : '';
+    const curBadge = curTiene
+      ? `<span style="color:#10b981;font-size:0.85em;"><i class="fas fa-check-circle"></i> ${curArchivo}${curAnio}</span>`
+      : '<span style="color:#ef4444;font-size:0.85em;"><i class="fas fa-exclamation-circle"></i> Pendiente de subir</span>';
+    const curVerBtn = curTiene
+      ? `<button onclick="verArchivo(${alumnoId}, '${curPeriod}')" style="background:#10b981;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;"><i class="fa-solid fa-eye"></i> Ver</button>`
       : '';
 
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;';
-    row.innerHTML = `
+    const curRow = document.createElement('div');
+    curRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#eff6ff;border:2px solid #4f46e5;border-radius:10px;';
+    curRow.innerHTML = `
       <div>
-        <span style="font-weight:600;color:#374151;">${p}${labelPrefix}</span><br>
-        <small>${badge}</small>
+        <span style="font-weight:600;color:#374151;">${curPeriod}
+          <span style="background:#4f46e5;color:white;padding:2px 6px;border-radius:4px;font-size:0.75rem;margin-left:8px;font-weight:normal;">Año Actual ✦</span>
+        </span><br>
+        <small>${curBadge}</small>
+        <small style="display:block;color:#6b7280;margin-top:3px;font-size:0.78rem;">Al subir esta nota, pasará a ser el año anterior y el alumno avanzará al siguiente grado.</small>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
-        ${verBtn}
-        <input type="text" id="panio_${alumnoId}_${p.replace(/[^a-zA-Z0-9]/g, '_')}" data-periodo="${p}" placeholder="Año" style="width:70px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;" value="${tieneNota && notaInfo.anio ? notaInfo.anio : new Date().getFullYear()}" disabled class="anio-input">
-        <input type="file" id="pfile_${alumnoId}_${p.replace(/[^a-zA-Z0-9]/g, '_')}" style="display:none;" onchange="uploadFileFromPerfil(${alumnoId}, '${p}', this)">
-        <button onclick="document.getElementById('pfile_${alumnoId}_${p.replace(/[^a-zA-Z0-9]/g, '_')}').click()" style="background:#4f46e5;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;">
-          <i class="fas fa-upload"></i> Subir
+        ${curVerBtn}
+        <input type="text" id="panio_${alumnoId}_${curPeriod.replace(/[^a-zA-Z0-9]/g, '_')}" data-periodo="${curPeriod}" placeholder="Año" style="width:70px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;" value="${curTiene && curNota.anio ? curNota.anio : new Date().getFullYear()}" disabled class="anio-input">
+        <input type="file" id="pfile_${alumnoId}_${curPeriod.replace(/[^a-zA-Z0-9]/g, '_')}" style="display:none;" onchange="uploadFileFromPerfil(${alumnoId}, '${curPeriod}', this, true)">
+        <button onclick="document.getElementById('pfile_${alumnoId}_${curPeriod.replace(/[^a-zA-Z0-9]/g, '_')}').click()" style="background:#4f46e5;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;font-weight:600;">
+          <i class="fas fa-upload"></i> ${curTiene ? 'Reemplazar' : 'Subir Nota Actual'}
         </button>
       </div>
     `;
-    notasContainer.appendChild(row);
+    notasContainer.appendChild(curRow);
+
+  } else {
+    // ——— Default rendering for all other cases ———
+    for (let i = 0; i < perList.length; i++) {
+      const p = perList[i];
+      const notaInfo = notasSubidas[p];
+      const tieneNota = !!notaInfo;
+      if (tieneNota) hasAnyNote = true;
+      const nombreArchivo = tieneNota ? notaInfo.archivo : null;
+      const anio = tieneNota && notaInfo.anio ? ` (Año: ${notaInfo.anio})` : '';
+
+      let labelPrefix = '';
+      let badge = '';
+      
+      badge = tieneNota
+        ? `<span style="color:#10b981;font-size:0.85em;"><i class="fas fa-check-circle"></i> ${nombreArchivo}${anio}</span>`
+        : '<span style="color:#9ca3af;font-size:0.85em;"><i class="fas fa-times-circle"></i> Sin archivo</span>';
+      
+      const verBtn = tieneNota
+        ? `<button onclick="verArchivo(${alumnoId}, '${p}')" style="background:#10b981;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;">
+             <i class="fa-solid fa-eye"></i> Ver
+           </button>`
+        : '';
+
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;';
+      row.innerHTML = `
+        <div>
+          <span style="font-weight:600;color:#374151;">${p}${labelPrefix}</span><br>
+          <small>${badge}</small>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          ${verBtn}
+          <input type="text" id="panio_${alumnoId}_${p.replace(/[^a-zA-Z0-9]/g, '_')}" data-periodo="${p}" placeholder="Año" style="width:70px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;" value="${tieneNota && notaInfo.anio ? notaInfo.anio : new Date().getFullYear()}" disabled class="anio-input">
+          <input type="file" id="pfile_${alumnoId}_${p.replace(/[^a-zA-Z0-9]/g, '_')}" style="display:none;" onchange="uploadFileFromPerfil(${alumnoId}, '${p}', this)">
+          <button onclick="document.getElementById('pfile_${alumnoId}_${p.replace(/[^a-zA-Z0-9]/g, '_')}').click()" style="background:#4f46e5;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;">
+            <i class="fas fa-upload"></i> Subir
+          </button>
+        </div>
+      `;
+      notasContainer.appendChild(row);
+    }
   }
 
   const btnEditAnios = document.getElementById('btnEditAnios');
@@ -701,20 +998,31 @@ async function toggleEditAnios() {
 
 async function deleteFromProfile() {
   if (!perfilAlumnoActual) return;
-  if (!confirm('\u00bfEliminar a ' + perfilAlumnoActual.nombre + ' ' + perfilAlumnoActual.apellido + ' y todos sus archivos?')) return;
+  if (!confirm('¿Eliminar a ' + perfilAlumnoActual.nombre + ' ' + perfilAlumnoActual.apellido + ' y todos sus archivos?')) return;
   const res = await eel.delete_alumno(parseInt(perfilAlumnoActual.id))();
   if (res.success) {
-    perfilModal.classList.remove('show');
-    perfilAlumnoActual = null;
+    closePerfilScreen();
     renderDashboard();
   } else {
     alert('Error al eliminar: ' + res.error);
   }
 }
 
-async function uploadFileFromPerfil(alumnoId, periodo, inputEl) {
+async function uploadFileFromPerfil(alumnoId, periodo, inputEl, isCurrentYear = false) {
   const file = inputEl.files[0];
   if (!file) return;
+
+  if (isCurrentYear) {
+    const confirmed = confirm(
+      `¿Confirmar subida de nota para "${periodo}"?\n\n` +
+      `Al confirmar:\n` +
+      `• Esta nota pasará a ser la nota del año anterior.\n` +
+      `• La nota anterior se eliminará automáticamente.\n` +
+      `• El alumno avanzará al siguiente grado.`
+    );
+    if (!confirmed) return;
+  }
+
   const anioInputId = `panio_${alumnoId}_${periodo.replace(/[^a-zA-Z0-9]/g, '_')}`;
   const anioInput = document.getElementById(anioInputId);
   const anio = anioInput ? anioInput.value.trim() : new Date().getFullYear().toString();
@@ -727,6 +1035,14 @@ async function uploadFileFromPerfil(alumnoId, periodo, inputEl) {
     if (uploadBtn) uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     const res = await eel.upload_nota(alumnoId, periodo, base64, file.name, anio)();
     if (res.success) {
+      // Reload student list so the new ingreso_periodo/nivel is reflected
+      const updated = await eel.get_alumnos(null)();
+      students = updated;
+      // Find the (possibly promoted) student by id and reopen their profile
+      const freshAlumno = students.find(s => s.id === alumnoId);
+      if (freshAlumno) {
+        perfilAlumnoActual = freshAlumno;
+      }
       openPerfil(alumnoId);
     } else {
       alert('Error subiendo el archivo: ' + res.error);

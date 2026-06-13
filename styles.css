@@ -396,16 +396,18 @@ body {
 }
 
 .sidebar-header {
-  padding: 24px 20px;
+  padding: 28px 20px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
+  text-align: center;
+  gap: 14px;
   border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
 .sidebar-logo {
-  width: 44px;
-  height: 44px;
+  width: 90px;
+  height: 90px;
   background: transparent;
   border-radius: 0;
   display: flex;
@@ -415,17 +417,19 @@ body {
 }
 
 .sidebar-logo img {
-  width: 44px;
-  height: 44px;
+  width: 90px;
+  height: 90px;
   object-fit: contain;
-  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.4));
 }
 
 .sidebar-header h3 {
   color: var(--text-white);
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  white-space: nowrap;
+  white-space: normal;
+  line-height: 1.4;
+  margin: 0;
 }
 
 .sidebar-nav {
