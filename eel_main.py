@@ -1,6 +1,10 @@
 import eel
 import sqlite3
 import os
+import pandas as pd
+import zipfile
+import io
+import json
 
 # Inicializar Eel
 eel.init('.')
@@ -8,8 +12,15 @@ eel.init('.')
 # Conexión a la base de datos
 DB_FILE = 'colegio.db'
 
+def get_conn():
+    """Abre una conexión con timeout y WAL mode para evitar 'database locked'."""
+    conn = sqlite3.connect(DB_FILE, timeout=30, check_same_thread=False)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    return conn
+
 def init_db():
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_conn()
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS usuarios (
@@ -87,7 +98,7 @@ def login(username, password):
         if username == 'admin' and password == 'admin':
             return {'success': True, 'user': {'username': 'admin', 'level': None, 'isAdmin': True}}
             
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_conn()
         cursor = conn.cursor()
         cursor.execute("SELECT id, username, nivel FROM usuarios WHERE username = ? AND password = ?", (username, password))
         user = cursor.fetchone()
@@ -106,7 +117,7 @@ def register(username, password, nivel):
         return {'success': False, 'error': 'Ese usuario no está disponible'}
         
     try:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_conn()
         cursor = conn.cursor()
         # Verificar si existe
         cursor.execute("SELECT id FROM usuarios WHERE username = ?", (username,))
@@ -121,13 +132,24 @@ def register(username, password, nivel):
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
+@eel.expose
+def get_users():
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, nivel FROM usuarios WHERE username != 'admin'")
+        rows = cursor.fetchall()
+        conn.close()
+        return {'success': True, 'users': [{'id': r[0], 'username': r[1], 'nivel': r[2]} for r in rows]}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
 import base64
 import shutil
 
 @eel.expose
 def get_alumnos(nivel=None):
     try:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_conn()
         cursor = conn.cursor()
         if nivel:
             cursor.execute("SELECT a.id, a.cedula, a.nombre, a.apellido, a.nivel, a.estado, GROUP_CONCAT(n.anio), a.tipo, a.ingreso_periodo, a.direccion, a.ciudad, a.estado_residencia, a.telefono_casa FROM alumnos a LEFT JOIN notas n ON a.id = n.alumno_id WHERE a.nivel = ? GROUP BY a.id", (nivel,))
@@ -166,7 +188,7 @@ def get_alumnos(nivel=None):
 def add_alumno(cedula, nombre, apellido, nivel, tipo='Regular', ingreso_periodo=None,
                direccion=None, ciudad=None, estado_residencia=None, telefono_casa=None):
     try:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_conn()
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO alumnos (cedula, nombre, apellido, nivel, tipo, ingreso_periodo, direccion, ciudad, estado_residencia, telefono_casa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -185,7 +207,7 @@ def add_alumno(cedula, nombre, apellido, nivel, tipo='Regular', ingreso_periodo=
 def save_familiares(alumno_id, familiares):
     """Reemplaza todos los familiares de un alumno."""
     try:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_conn()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM familiares WHERE alumno_id = ?", (alumno_id,))
         for f in familiares:
@@ -202,7 +224,7 @@ def save_familiares(alumno_id, familiares):
 @eel.expose
 def get_familiares(alumno_id):
     try:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_conn()
         cursor = conn.cursor()
         cursor.execute("SELECT id, nombre, apellido, cedula, telefono, parentesco FROM familiares WHERE alumno_id = ?", (alumno_id,))
         rows = cursor.fetchall()
@@ -217,7 +239,7 @@ def get_familiares(alumno_id):
 @eel.expose
 def update_alumno_datos(alumno_id, direccion, ciudad, estado_residencia, telefono_casa):
     try:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_conn()
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE alumnos SET direccion=?, ciudad=?, estado_residencia=?, telefono_casa=? WHERE id=?",
@@ -232,7 +254,7 @@ def update_alumno_datos(alumno_id, direccion, ciudad, estado_residencia, telefon
 @eel.expose
 def delete_alumno(id):
     try:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_conn()
         cursor = conn.cursor()
         
         # Eliminar archivos físicamente
@@ -263,7 +285,7 @@ def upload_nota(alumno_id, periodo, base64_data, filename, anio):
         with open(file_path, "wb") as fh:
             fh.write(base64.b64decode(base64_data))
             
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_conn()
         cursor = conn.cursor()
         cursor.execute("SELECT id, archivo_ruta FROM notas WHERE alumno_id = ? AND periodo = ?", (alumno_id, periodo))
         existing = cursor.fetchone()
@@ -308,7 +330,7 @@ def upload_nota(alumno_id, periodo, base64_data, filename, anio):
                         cursor.execute("UPDATE alumnos SET ingreso_periodo = ?, nivel = ? WHERE id = ?", (next_period, next_level, alumno_id))
                     else:
                         # Finished 6to Grado: promote to Egresado
-                        cursor.execute("UPDATE alumnos SET tipo = 'Egresado', ingreso_periodo = NULL WHERE id = ?", (alumno_id,))
+                        cursor.execute("UPDATE alumnos SET tipo = 'Egresado', ingreso_periodo = '6to Grado' WHERE id = ?", (alumno_id,))
                         
         conn.commit()
         conn.close()
@@ -319,7 +341,7 @@ def upload_nota(alumno_id, periodo, base64_data, filename, anio):
 @eel.expose
 def get_notas(alumno_id):
     try:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_conn()
         cursor = conn.cursor()
         cursor.execute("SELECT periodo, archivo_nombre, anio FROM notas WHERE alumno_id = ?", (alumno_id,))
         rows = cursor.fetchall()
@@ -331,7 +353,7 @@ def get_notas(alumno_id):
 @eel.expose
 def open_nota_file(alumno_id, periodo):
     try:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_conn()
         cursor = conn.cursor()
         cursor.execute("SELECT archivo_ruta FROM notas WHERE alumno_id = ? AND periodo = ?", (alumno_id, periodo))
         row = cursor.fetchone()
@@ -355,7 +377,7 @@ def open_nota_file(alumno_id, periodo):
 @eel.expose
 def update_anios(alumno_id, periodos_anios):
     try:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_conn()
         cursor = conn.cursor()
         for periodo, anio in periodos_anios.items():
             cursor.execute("UPDATE notas SET anio = ? WHERE alumno_id = ? AND periodo = ?", (anio, alumno_id, periodo))
@@ -365,6 +387,282 @@ def update_anios(alumno_id, periodos_anios):
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
+@eel.expose
+def get_egresado_years(nivel=None):
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+        if nivel in ('primaria_prescolar', 'primaria', 'prescolar'):
+            cursor.execute("""
+                SELECT DISTINCT n.anio FROM notas n 
+                JOIN alumnos a ON a.id = n.alumno_id 
+                WHERE a.nivel IN ('primaria', 'prescolar', 'primaria_prescolar') 
+                AND (a.tipo = 'Egresado' OR a.ingreso_periodo = '6to Grado')
+                AND n.anio IS NOT NULL AND n.anio != ''
+                ORDER BY n.anio DESC
+            """)
+        elif nivel == 'bachillerato':
+            cursor.execute("""
+                SELECT DISTINCT n.anio FROM notas n 
+                JOIN alumnos a ON a.id = n.alumno_id 
+                WHERE a.nivel = 'bachillerato' 
+                AND (a.tipo = 'Egresado' OR a.ingreso_periodo = '5to Año')
+                AND n.anio IS NOT NULL AND n.anio != ''
+                ORDER BY n.anio DESC
+            """)
+        else:
+            cursor.execute("""
+                SELECT DISTINCT n.anio FROM notas n 
+                JOIN alumnos a ON a.id = n.alumno_id 
+                WHERE (a.tipo = 'Egresado' OR a.ingreso_periodo IN ('6to Grado', '5to Año'))
+                AND n.anio IS NOT NULL AND n.anio != ''
+                ORDER BY n.anio DESC
+            """)
+        rows = cursor.fetchall()
+        conn.close()
+        years = [r[0] for r in rows if r[0]]
+        return {'success': True, 'years': years}
+    except Exception as e:
+        return {'success': False, 'error': str(e), 'years': []}
+
+@eel.expose
+def export_students(nivel, selected_year=None, export_all=False, export_mode='all', egresado_year=None):
+    try:
+        conn = get_conn()
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Determinación de la consulta según export_mode
+        if export_mode == 'egresados' or selected_year == 'Egresados':
+            target_egresado_year = egresado_year if (egresado_year and egresado_year != 'all') else None
+            
+            if nivel in ('primaria_prescolar', 'primaria', 'prescolar'):
+                level_filter = "a.nivel IN ('primaria', 'prescolar', 'primaria_prescolar') AND (a.tipo = 'Egresado' OR a.ingreso_periodo = '6to Grado')"
+                nivel_tag = "Egresados_Primaria"
+            elif nivel == 'bachillerato':
+                level_filter = "a.nivel = 'bachillerato' AND (a.tipo = 'Egresado' OR a.ingreso_periodo = '5to Año')"
+                nivel_tag = "Egresados_Bachillerato"
+            else:
+                level_filter = "(a.tipo = 'Egresado' OR a.ingreso_periodo IN ('6to Grado', '5to Año'))"
+                nivel_tag = "Egresados"
+
+            if target_egresado_year:
+                cursor.execute(f"""
+                    SELECT DISTINCT a.* FROM alumnos a 
+                    INNER JOIN notas n ON a.id = n.alumno_id 
+                    WHERE {level_filter}
+                    AND n.anio = ?
+                """, (target_egresado_year,))
+            else:
+                cursor.execute(f"SELECT DISTINCT a.* FROM alumnos a WHERE {level_filter}")
+        elif export_mode == 'year' and selected_year:
+            nivel_tag = selected_year.replace(' ', '_')
+            if nivel in ('primaria_prescolar', 'primaria', 'prescolar'):
+                cursor.execute("""
+                    SELECT DISTINCT a.* FROM alumnos a 
+                    LEFT JOIN notas n ON a.id = n.alumno_id 
+                    WHERE a.nivel IN ('primaria', 'prescolar', 'primaria_prescolar') 
+                    AND (a.ingreso_periodo = ? OR n.periodo = ?)
+                    AND (a.tipo IS NULL OR a.tipo != 'Egresado')
+                """, (selected_year, selected_year))
+            elif nivel == 'bachillerato':
+                cursor.execute("""
+                    SELECT DISTINCT a.* FROM alumnos a 
+                    LEFT JOIN notas n ON a.id = n.alumno_id 
+                    WHERE a.nivel = 'bachillerato' 
+                    AND (a.ingreso_periodo = ? OR n.periodo = ?)
+                    AND (a.tipo IS NULL OR a.tipo != 'Egresado')
+                """, (selected_year, selected_year))
+            else:
+                cursor.execute("""
+                    SELECT DISTINCT a.* FROM alumnos a 
+                    LEFT JOIN notas n ON a.id = n.alumno_id 
+                    WHERE (a.ingreso_periodo = ? OR n.periodo = ?)
+                    AND (a.tipo IS NULL OR a.tipo != 'Egresado')
+                """, (selected_year, selected_year))
+        else: # export_all or export_mode == 'all'
+            nivel_tag = "Todos"
+            if nivel in ('primaria_prescolar', 'primaria', 'prescolar'):
+                cursor.execute("SELECT * FROM alumnos WHERE nivel IN ('primaria', 'prescolar', 'primaria_prescolar') AND (tipo IS NULL OR tipo != 'Egresado')")
+            elif nivel == 'bachillerato':
+                cursor.execute("SELECT * FROM alumnos WHERE nivel = 'bachillerato' AND (tipo IS NULL OR tipo != 'Egresado')")
+            else: # admin u otro
+                cursor.execute("SELECT * FROM alumnos WHERE tipo IS NULL OR tipo != 'Egresado'")
+                
+        alumnos = cursor.fetchall()
+        
+        if not alumnos:
+            conn.close()
+            det_err = f" (Año de egreso: {egresado_year})" if (export_mode == 'egresados' and egresado_year) else (f" de {selected_year}" if selected_year else "")
+            return {'success': False, 'error': f'No hay estudiantes para exportar{det_err}.'}
+            
+        alumnos_list = [dict(r) for r in alumnos]
+        
+        for alumno in alumnos_list:
+            cursor.execute("SELECT * FROM familiares WHERE alumno_id = ?", (alumno['id'],))
+            alumno['familiares'] = [dict(f) for f in cursor.fetchall()]
+            cursor.execute("SELECT * FROM notas WHERE alumno_id = ?", (alumno['id'],))
+            alumno['notas'] = [dict(n) for n in cursor.fetchall()]
+            
+        df = pd.DataFrame(alumnos_list)
+        excel_buffer = io.BytesIO()
+        df.drop(columns=['familiares', 'notas'], errors='ignore').to_excel(excel_buffer, index=False)
+        excel_data = excel_buffer.getvalue()
+        
+        # Directorio de exportaciones
+        export_dir = os.path.abspath('exportaciones')
+        if not os.path.exists(export_dir):
+            os.makedirs(export_dir)
+        
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        year_suffix = f"_{egresado_year}" if (export_mode == 'egresados' and egresado_year and egresado_year != 'all') else ""
+        zip_filename = f'exportacion_{nivel}_{nivel_tag}{year_suffix}_{timestamp}.zip'
+        zip_path = os.path.join(export_dir, zip_filename)
+        
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr('estudiantes.xlsx', excel_data)
+            
+            for alumno in alumnos_list:
+                for nota in alumno['notas']:
+                    ruta_rel = nota.get('archivo_ruta', '')
+                    ruta_abs = os.path.join(base_dir, ruta_rel) if ruta_rel else ''
+                    if not os.path.exists(ruta_abs):
+                        ruta_abs = ruta_rel
+                    if ruta_abs and os.path.exists(ruta_abs):
+                        arcname = f"archivos/{os.path.basename(ruta_abs)}"
+                        zf.write(ruta_abs, arcname)
+                        nota['archivo_zip_path'] = arcname
+
+            # Escribir data.json una sola vez con la info completa
+            zf.writestr('data.json', json.dumps(alumnos_list, ensure_ascii=False))
+
+        conn.close()
+        
+        import subprocess
+        subprocess.Popen(f'explorer /select,"{zip_path}"')
+        
+        return {
+            'success': True, 
+            'filename': zip_filename, 
+            'path': zip_path, 
+            'count': len(alumnos_list)
+        }
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def import_students(base64_zip, target_level, is_new_entry, selected_year=None):
+    try:
+        if ',' in base64_zip:
+            base64_zip = base64_zip.split(',')[1]
+            
+        zip_data = base64.b64decode(base64_zip)
+        zip_buffer = io.BytesIO(zip_data)
+        
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        uploads_dir = os.path.join(base_dir, 'uploads')
+        if not os.path.exists(uploads_dir):
+            os.makedirs(uploads_dir)
+
+        with zipfile.ZipFile(zip_buffer, 'r') as zf:
+            if 'data.json' not in zf.namelist():
+                return {'success': False, 'error': 'El archivo ZIP no tiene el formato correcto (falta data.json)'}
+                
+            data = json.loads(zf.read('data.json').decode('utf-8'))
+            
+            # Extraer archivos de notas a la carpeta uploads
+            for name in zf.namelist():
+                if (name.startswith('archivos/') or name.startswith('uploads/')) and not name.endswith('/'):
+                    fname = os.path.basename(name)
+                    if fname:
+                        target_file = os.path.join(uploads_dir, fname)
+                        with zf.open(name) as src, open(target_file, 'wb') as dst:
+                            shutil.copyfileobj(src, dst)
+                    
+        conn = get_conn()
+        cursor = conn.cursor()
+        
+        # Si se especifica un año en particular, intentar filtrar o asignar dicho año
+        if selected_year and selected_year not in ('all', 'todos', 'None', ''):
+            matching_data = [a for a in data if a.get('ingreso_periodo') == selected_year]
+            if matching_data:
+                data = matching_data
+            else:
+                for a in data:
+                    a['ingreso_periodo'] = selected_year
+        
+        count = 0
+        for alumno in data:
+            cursor.execute("SELECT id FROM alumnos WHERE cedula = ?", (alumno['cedula'],))
+            existing = cursor.fetchone()
+            
+            if target_level == 'bachillerato':
+                nuevo_nivel = 'bachillerato'
+                if is_new_entry:
+                    tipo = 'Nuevo Ingreso'
+                    ingreso_periodo = selected_year if selected_year and selected_year not in ('all', 'todos') else '1er Año'
+                else:
+                    tipo = alumno.get('tipo', 'Regular')
+                    ingreso_periodo = selected_year if (selected_year and selected_year not in ('all', 'todos')) else alumno.get('ingreso_periodo', '1er Año')
+            else:
+                rec_lvl = alumno.get('nivel', 'primaria')
+                nuevo_nivel = rec_lvl if rec_lvl in ('primaria', 'prescolar', 'primaria_prescolar') else 'primaria'
+                tipo = alumno.get('tipo', 'Regular')
+                ingreso_periodo = selected_year if (selected_year and selected_year not in ('all', 'todos')) else alumno.get('ingreso_periodo')
+                
+            if existing:
+                new_id = existing[0]
+                cursor.execute(
+                    "UPDATE alumnos SET nombre=?, apellido=?, nivel=?, tipo=?, ingreso_periodo=?, direccion=?, ciudad=?, estado_residencia=?, telefono_casa=? WHERE id=?",
+                    (alumno['nombre'], alumno['apellido'], nuevo_nivel, tipo, ingreso_periodo, alumno.get('direccion'), alumno.get('ciudad'), alumno.get('estado_residencia'), alumno.get('telefono_casa'), new_id)
+                )
+            else:
+                cursor.execute(
+                    "INSERT INTO alumnos (cedula, nombre, apellido, nivel, tipo, ingreso_periodo, direccion, ciudad, estado_residencia, telefono_casa) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (alumno['cedula'], alumno['nombre'], alumno['apellido'], nuevo_nivel, tipo, ingreso_periodo, alumno.get('direccion'), alumno.get('ciudad'), alumno.get('estado_residencia'), alumno.get('telefono_casa'))
+                )
+                new_id = cursor.lastrowid
+            
+            for fam in alumno.get('familiares', []):
+                cursor.execute("SELECT id FROM familiares WHERE alumno_id = ? AND nombre = ? AND apellido = ?", (new_id, fam['nombre'], fam['apellido']))
+                if not cursor.fetchone():
+                    cursor.execute(
+                        "INSERT INTO familiares (alumno_id, nombre, apellido, cedula, telefono, parentesco) VALUES (?, ?, ?, ?, ?, ?)",
+                        (new_id, fam['nombre'], fam['apellido'], fam.get('cedula'), fam.get('telefono'), fam.get('parentesco', 'Padre/Madre'))
+                    )
+                
+            for nota in alumno.get('notas', []):
+                fname = ''
+                if 'archivo_zip_path' in nota:
+                    fname = os.path.basename(nota['archivo_zip_path'])
+                if not fname and nota.get('archivo_ruta'):
+                    fname = os.path.basename(nota['archivo_ruta'])
+                    
+                new_ruta = os.path.join('uploads', fname) if fname else nota.get('archivo_ruta', '')
+                
+                cursor.execute("SELECT id FROM notas WHERE alumno_id = ? AND periodo = ?", (new_id, nota['periodo']))
+                n_exist = cursor.fetchone()
+                if n_exist:
+                    cursor.execute(
+                        "UPDATE notas SET archivo_nombre = ?, archivo_ruta = ?, anio = ? WHERE id = ?",
+                        (nota['archivo_nombre'], new_ruta, nota.get('anio'), n_exist[0])
+                    )
+                else:
+                    cursor.execute(
+                        "INSERT INTO notas (alumno_id, periodo, archivo_nombre, archivo_ruta, anio) VALUES (?, ?, ?, ?, ?)",
+                        (new_id, nota['periodo'], nota['archivo_nombre'], new_ruta, nota.get('anio'))
+                    )
+            count += 1
+            
+        conn.commit()
+        conn.close()
+        
+        return {'success': True, 'imported_count': count}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
 
 import webview
 import socket
@@ -397,4 +695,4 @@ if __name__ == '__main__':
 
     # Abrir una ventana nativa de escritorio con pywebview usando qt
     webview.create_window('República de Indonesia', f'http://localhost:{port}/index.html', width=1024, height=768)
-    webview.start(gui='qt')
+    webview.start()

@@ -37,17 +37,7 @@ const hamburger = $('hamburger');
 const sidebar = $('sidebar');
 
 // ============ AUTH TABS ============
-document.querySelectorAll('.auth-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
-    tab.classList.add('active');
-    $(tab.dataset.form + 'Form').classList.add('active');
-    loginError.classList.remove('show');
-    registerError.classList.remove('show');
-    registerSuccess.classList.remove('show');
-  });
-});
+// Removed.
 
 // ============ LOGIN ============
 loginForm.addEventListener('submit', async (e) => {
@@ -68,12 +58,16 @@ loginForm.addEventListener('submit', async (e) => {
 
 function loginSuccess() {
   loginError.classList.remove('show');
-  currentLevel = currentUser.isAdmin ? 'primaria_prescolar' : currentUser.level;
-  showScreen('dashboard');
-  currentTab = 'inicio';
-  updateSidebarUser();
-  applyPermissions();
-  renderDashboard();
+  if (currentUser.isAdmin) {
+    showScreen('admin');
+  } else {
+    currentLevel = currentUser.level;
+    showScreen('dashboard');
+    currentTab = 'inicio';
+    updateSidebarUser();
+    applyPermissions();
+    renderDashboard();
+  }
 }
 
 // ============ REGISTER ============
@@ -110,11 +104,9 @@ registerForm.addEventListener('submit', async (e) => {
   if (response.success) {
     registerForm.reset();
     registerSuccess.classList.add('show');
+    loadTeachersList();
     setTimeout(() => {
       registerSuccess.classList.remove('show');
-      document.querySelector('.auth-tab[data-form="login"]').click();
-      $('username').value = username;
-      $('password').value = password;
     }, 1500);
   } else {
     registerError.textContent = response.error || 'Error al registrar';
@@ -125,8 +117,38 @@ registerForm.addEventListener('submit', async (e) => {
 // ============ SCREEN NAV ============
 function showScreen(screen) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  $('adminScreen').style.display = 'none';
   if (screen === 'login') loginScreen.classList.add('active');
   if (screen === 'dashboard') dashboardScreen.classList.add('active');
+  if (screen === 'admin') {
+    $('adminScreen').style.display = 'block';
+    loadTeachersList();
+  }
+}
+
+async function loadTeachersList() {
+  const tbody = $('teachersListBody');
+  const emptyMsg = $('teachersEmpty');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="2" style="text-align: center; padding: 10px;">Cargando...</td></tr>';
+  
+  const res = await eel.get_users()();
+  if (res.success) {
+    if (res.users.length === 0) {
+      tbody.innerHTML = '';
+      emptyMsg.style.display = 'block';
+    } else {
+      emptyMsg.style.display = 'none';
+      tbody.innerHTML = res.users.map(u => `
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 10px; font-weight: 500; color: #1e293b;">${u.username}</td>
+          <td style="padding: 10px; color: #475569;">${levelNames[u.nivel] || u.nivel}</td>
+        </tr>
+      `).join('');
+    }
+  } else {
+    tbody.innerHTML = '<tr><td colspan="2" style="text-align: center; color: red; padding: 10px;">Error al cargar</td></tr>';
+  }
 }
 
 // ============ SIDEBAR USER ============
@@ -202,6 +224,22 @@ function applyPermissions() {
       }
     }
   });
+
+  // Mostrar/ocultar botones exportar/importar
+  const isPrimaria = userLvl === 'primaria_prescolar';
+  
+  const importBtnLabel = $('importBtnLabel');
+  const importNewEntryBtnLabel = $('importNewEntryBtnLabel');
+  
+  // "Importar ZIP": visible para todos (primaria, bachillerato y admin)
+  if (importBtnLabel) {
+    importBtnLabel.style.display = 'inline-flex';
+  }
+  
+  // "Importar N.I." (Nuevo Ingreso desde primaria): solo para bachillerato
+  if (importNewEntryBtnLabel) {
+    importNewEntryBtnLabel.style.display = (!isAdmin && !isPrimaria) ? 'inline-flex' : 'none';
+  }
 
   // Configurar el selector de nivel al agregar un alumno
   populateStudentLevelDropdown();
@@ -432,14 +470,17 @@ document.querySelectorAll('.nav-item').forEach(item => {
 });
 
 // ============ LOGOUT ============
-$('logoutBtn').addEventListener('click', () => {
+function performLogout() {
   currentUser = null;
   showScreen('login');
   $('username').value = '';
   $('password').value = '';
   loginError.classList.remove('show');
-  document.querySelector('.auth-tab[data-form="login"]').click();
-});
+}
+$('logoutBtn').addEventListener('click', performLogout);
+if ($('adminLogoutBtn')) {
+  $('adminLogoutBtn').addEventListener('click', performLogout);
+}
 
 // ============ ADD STUDENT SCREEN ============
 function openAddStudentScreen() {
@@ -502,7 +543,11 @@ function renderNotasModal(nivel) {
   // Decide which periods to display
   let periodsToShow = [];
   if (tipo === 'Egresado') {
-    periodsToShow = ['Notas Totales'];
+    if (nivel === 'primaria_prescolar' || nivel === 'primaria' || nivel === 'prescolar') {
+      periodsToShow = ['6to Grado'];
+    } else {
+      periodsToShow = ['Notas Totales'];
+    }
   } else if (tipo === 'Nuevo Ingreso' || tipo === 'Regular') {
     const idx = perList.indexOf(ingresoPeriodo);
     if (idx > 0) {
@@ -706,6 +751,228 @@ async function deleteStudent(id) {
 // ============ PERFIL SCREEN ============
 const perfilScreen = $('perfilScreen');
 
+// ============ EXPORT / IMPORT ============
+async function openExportModal() {
+  const modal = $('exportModal');
+  if (!modal) return;
+  
+  const yearSelect = $('exportYearSelect');
+  yearSelect.innerHTML = '';
+  
+  const userLvl = currentUser ? currentUser.level : currentLevel;
+  let availableYears = [];
+  
+  if (userLvl === 'primaria_prescolar' || userLvl === 'primaria' || userLvl === 'prescolar') {
+    availableYears = ['2do Nivel', '3er Nivel', '1er Grado', '2do Grado', '3er Grado', '4to Grado', '5to Grado', '6to Grado'];
+  } else if (userLvl === 'bachillerato') {
+    availableYears = ['1er Año', '2do Año', '3er Año', '4to Año', '5to Año'];
+  } else {
+    availableYears = ['2do Nivel', '3er Nivel', '1er Grado', '2do Grado', '3er Grado', '4to Grado', '5to Grado', '6to Grado', '1er Año', '2do Año', '3er Año', '4to Año', '5to Año'];
+  }
+  
+  availableYears.forEach(y => {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    yearSelect.appendChild(opt);
+  });
+
+  // Cargar años de egresados dinámicamente
+  const egresadoYearSelect = $('exportEgresadoYearSelect');
+  if (egresadoYearSelect) {
+    egresadoYearSelect.innerHTML = '<option value="all">Todos los egresados</option>';
+    try {
+      const resYears = await eel.get_egresado_years(userLvl)();
+      let dbYears = (resYears && resYears.success) ? resYears.years : [];
+      const currentYr = new Date().getFullYear();
+      const defaultYears = [currentYr.toString(), (currentYr - 1).toString(), (currentYr - 2).toString()];
+      const combinedYears = Array.from(new Set([...dbYears, ...defaultYears])).sort((a, b) => b.localeCompare(a));
+      
+      combinedYears.forEach(y => {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = `Egresados ${y}`;
+        egresadoYearSelect.appendChild(opt);
+      });
+    } catch (err) {
+      console.error('Error cargando años de egresados:', err);
+    }
+  }
+
+  const allRadio = document.querySelector('input[name="exportMode"][value="all"]');
+  if (allRadio) allRadio.checked = true;
+  if ($('exportYearContainer')) $('exportYearContainer').style.display = 'none';
+  if ($('exportEgresadoContainer')) $('exportEgresadoContainer').style.display = 'none';
+
+  modal.style.display = 'flex';
+}
+
+function closeExportModal() {
+  const modal = $('exportModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function openImportModal(isNewEntry = false) {
+  const modal = $('importModal');
+  if (!modal) return;
+  
+  modal.dataset.isNewEntry = isNewEntry ? "true" : "false";
+
+  const yearSelect = $('importYearSelect');
+  yearSelect.innerHTML = '';
+  
+  const userLvl = currentUser ? currentUser.level : currentLevel;
+  let availableYears = [];
+  
+  if (userLvl === 'bachillerato') {
+    availableYears = ['1er Año', '2do Año', '3er Año', '4to Año', '5to Año'];
+  } else if (userLvl === 'primaria_prescolar' || userLvl === 'primaria' || userLvl === 'prescolar') {
+    availableYears = ['2do Nivel', '3er Nivel', '1er Grado', '2do Grado', '3er Grado', '4to Grado', '5to Grado', '6to Grado'];
+  } else {
+    availableYears = ['2do Nivel', '3er Nivel', '1er Grado', '2do Grado', '3er Grado', '4to Grado', '5to Grado', '6to Grado', '1er Año', '2do Año', '3er Año', '4to Año', '5to Año'];
+  }
+  
+  availableYears.forEach(y => {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    yearSelect.appendChild(opt);
+  });
+
+  const allRadio = document.querySelector('input[name="importMode"][value="all"]');
+  if (allRadio) allRadio.checked = true;
+  if ($('importYearContainer')) $('importYearContainer').style.display = 'none';
+  if ($('importModalFileInput')) $('importModalFileInput').value = '';
+
+  modal.style.display = 'flex';
+}
+
+function closeImportModal() {
+  const modal = $('importModal');
+  if (modal) modal.style.display = 'none';
+}
+
+window.openExportModal = openExportModal;
+window.closeExportModal = closeExportModal;
+window.openImportModal = openImportModal;
+window.closeImportModal = closeImportModal;
+
+document.querySelectorAll('input[name="exportMode"]').forEach(r => {
+  r.addEventListener('change', (e) => {
+    const yearContainer = $('exportYearContainer');
+    const egresadoContainer = $('exportEgresadoContainer');
+    if (yearContainer) yearContainer.style.display = e.target.value === 'year' ? 'block' : 'none';
+    if (egresadoContainer) egresadoContainer.style.display = e.target.value === 'egresados' ? 'block' : 'none';
+  });
+});
+
+document.querySelectorAll('input[name="importMode"]').forEach(r => {
+  r.addEventListener('change', (e) => {
+    const container = $('importYearContainer');
+    if (container) {
+      container.style.display = e.target.value === 'year' ? 'block' : 'none';
+    }
+  });
+});
+
+if ($('closeExportModal')) $('closeExportModal').addEventListener('click', closeExportModal);
+if ($('btnCancelExport')) $('btnCancelExport').addEventListener('click', closeExportModal);
+
+if ($('closeImportModal')) $('closeImportModal').addEventListener('click', closeImportModal);
+if ($('btnCancelImport')) $('btnCancelImport').addEventListener('click', closeImportModal);
+
+if ($('exportBtn')) {
+  $('exportBtn').addEventListener('click', () => {
+    openExportModal();
+  });
+}
+
+if ($('btnConfirmExport')) {
+  $('btnConfirmExport').addEventListener('click', async () => {
+    const mode = document.querySelector('input[name="exportMode"]:checked')?.value || 'all';
+    const selectedYear = mode === 'year' ? $('exportYearSelect').value : null;
+    const egresadoYear = mode === 'egresados' ? $('exportEgresadoYearSelect').value : null;
+    const exportAll = (mode === 'all');
+    
+    const btn = $('btnConfirmExport');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Exportando...';
+    
+    const res = await eel.export_students(currentLevel, selectedYear, exportAll, mode, egresadoYear)();
+    
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-download"></i> Exportar';
+    
+    if (res.success) {
+      closeExportModal();
+      alert(`✅ Exportación exitosa.\n${res.count} alumno(s) exportados.\n\nEl archivo "${res.filename}" fue guardado en la carpeta "exportaciones". El Explorador de Windows lo abrirá automáticamente.`);
+      await renderDashboard();
+    } else {
+      alert('⚠️ ' + res.error);
+    }
+  });
+}
+
+if ($('btnConfirmImport')) {
+  $('btnConfirmImport').addEventListener('click', async () => {
+    const fileInput = $('importModalFileInput');
+    if (!fileInput || !fileInput.files[0]) {
+      alert('Por favor selecciona un archivo ZIP para importar.');
+      return;
+    }
+    const file = fileInput.files[0];
+    const mode = document.querySelector('input[name="importMode"]:checked')?.value || 'all';
+    const selectedYear = mode === 'year' ? $('importYearSelect').value : null;
+    const isNewEntry = $('importModal').dataset.isNewEntry === "true";
+
+    const btn = $('btnConfirmImport');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importando...';
+
+    const reader = new FileReader();
+    reader.onload = async function() {
+      const base64zip = reader.result;
+      const res = await eel.import_students(base64zip, currentLevel, isNewEntry, selectedYear)();
+      
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-file-import"></i> Importar';
+      
+      if (res.success) {
+        closeImportModal();
+        alert(`✅ Importación exitosa.\nSe importaron ${res.imported_count} estudiante(s).`);
+        await renderDashboard();
+      } else {
+        alert('⚠️ Error al importar: ' + res.error);
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function downloadZip(base64data, filename) {
+  const link = document.createElement('a');
+  link.href = 'data:application/zip;base64,' + base64data;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+if ($('importBtnLabel')) {
+  $('importBtnLabel').addEventListener('click', (e) => {
+    e.preventDefault();
+    openImportModal(false);
+  });
+}
+
+if ($('importNewEntryBtnLabel')) {
+  $('importNewEntryBtnLabel').addEventListener('click', (e) => {
+    e.preventDefault();
+    openImportModal(true);
+  });
+}
+
+
 function closePerfilScreen() {
   perfilScreen.style.display = 'none';
   perfilAlumnoActual = null;
@@ -804,7 +1071,12 @@ async function openPerfil(alumnoId) {
   let entryIdx = -1;
   
   if (alumno.tipo === 'Egresado') {
-    perList = ['Notas Totales'];
+    if (alumno.level === 'primaria' || alumno.level === 'prescolar' || alumno.level === 'primaria_prescolar') {
+      const keys = Object.keys(notasSubidas);
+      perList = keys.length > 0 ? keys : ['6to Grado'];
+    } else {
+      perList = ['Notas Totales'];
+    }
   } else if (alumno.tipo === 'Nuevo Ingreso' || alumno.tipo === 'Regular') {
     const fullList = periodos[alumno.level] || [];
     entryIdx = fullList.indexOf(alumno.ingreso_periodo);
