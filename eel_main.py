@@ -5,6 +5,7 @@ import pandas as pd
 import zipfile
 import io
 import json
+import random
 
 # Inicializar Eel
 eel.init('.')
@@ -77,11 +78,57 @@ def init_db():
         "ALTER TABLE alumnos ADD COLUMN ciudad TEXT",
         "ALTER TABLE alumnos ADD COLUMN estado_residencia TEXT",
         "ALTER TABLE alumnos ADD COLUMN telefono_casa TEXT",
+        "ALTER TABLE usuarios ADD COLUMN pregunta_1 TEXT",
+        "ALTER TABLE usuarios ADD COLUMN respuesta_1 TEXT",
+        "ALTER TABLE usuarios ADD COLUMN pregunta_2 TEXT",
+        "ALTER TABLE usuarios ADD COLUMN respuesta_2 TEXT",
+        "ALTER TABLE usuarios ADD COLUMN pregunta_3 TEXT",
+        "ALTER TABLE usuarios ADD COLUMN respuesta_3 TEXT",
     ]:
         try:
             cursor.execute(col_def)
         except sqlite3.OperationalError:
             pass
+
+    # Crear o inicializar cuenta admin si no existe
+    cursor.execute("SELECT id FROM usuarios WHERE nivel = 'admin'")
+    if not cursor.fetchone():
+        # Verificar si hay un usuario con nombre 'admin'
+        cursor.execute("SELECT id FROM usuarios WHERE username = 'admin'")
+        existing_admin = cursor.fetchone()
+        if existing_admin:
+            cursor.execute("""
+                UPDATE usuarios SET 
+                    nivel = 'admin',
+                    pregunta_1 = COALESCE(pregunta_1, '¿CUÁL ES TU COLOR FAVORITO?'),
+                    respuesta_1 = COALESCE(respuesta_1, 'AZUL'),
+                    pregunta_2 = COALESCE(pregunta_2, '¿CUÁL ES TU CIUDAD DE NACIMIENTO?'),
+                    respuesta_2 = COALESCE(respuesta_2, 'CARACAS'),
+                    pregunta_3 = COALESCE(pregunta_3, '¿CUÁL ES EL NOMBRE DE TU PRIMERA MASCOTA?'),
+                    respuesta_3 = COALESCE(respuesta_3, 'LUCAS')
+                WHERE id = ?
+            """, (existing_admin[0],))
+        else:
+            cursor.execute("""
+                INSERT INTO usuarios (username, password, nivel, pregunta_1, respuesta_1, pregunta_2, respuesta_2, pregunta_3, respuesta_3)
+                VALUES ('admin', 'admin', 'admin',
+                        '¿CUÁL ES TU COLOR FAVORITO?', 'AZUL',
+                        '¿CUÁL ES TU CIUDAD DE NACIMIENTO?', 'CARACAS',
+                        '¿CUÁL ES EL NOMBRE DE TU PRIMERA MASCOTA?', 'LUCAS')
+            """)
+
+    # Garantizar que usuarios antiguos tengan preguntas por defecto
+    cursor.execute("""
+        UPDATE usuarios SET 
+            pregunta_1 = '¿CUÁL ES TU COLOR FAVORITO?',
+            respuesta_1 = 'AZUL',
+            pregunta_2 = '¿CUÁL ES TU CIUDAD DE NACIMIENTO?',
+            respuesta_2 = 'CARACAS',
+            pregunta_3 = '¿CUÁL ES EL NOMBRE DE TU PRIMERA MASCOTA?',
+            respuesta_3 = 'LUCAS'
+        WHERE pregunta_1 IS NULL OR pregunta_1 = ''
+    """)
+
     try:
         cursor.execute("UPDATE usuarios SET nivel = 'primaria_prescolar' WHERE nivel IN ('primaria', 'prescolar')")
     except Exception:
@@ -95,9 +142,6 @@ def init_db():
 @eel.expose
 def login(username, password):
     try:
-        if username == 'admin' and password == 'admin':
-            return {'success': True, 'user': {'username': 'admin', 'level': None, 'isAdmin': True}}
-            
         conn = get_conn()
         cursor = conn.cursor()
         cursor.execute("SELECT id, username, nivel FROM usuarios WHERE username = ? AND password = ?", (username, password))
@@ -105,27 +149,119 @@ def login(username, password):
         conn.close()
         
         if user:
-            return {'success': True, 'user': {'id': user[0], 'username': user[1], 'level': user[2], 'isAdmin': False}}
+            is_admin = (user[2] == 'admin')
+            return {
+                'success': True,
+                'user': {
+                    'id': user[0],
+                    'username': user[1],
+                    'level': None if is_admin else user[2],
+                    'isAdmin': is_admin
+                }
+            }
         else:
             return {'success': False, 'error': 'Usuario o contraseña incorrectos'}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
 @eel.expose
-def register(username, password, nivel):
-    if username == 'admin':
-        return {'success': False, 'error': 'Ese usuario no está disponible'}
-        
+def get_admin_account():
+    """Obtiene los datos de la cuenta administradora para su edición."""
     try:
         conn = get_conn()
         cursor = conn.cursor()
-        # Verificar si existe
+        cursor.execute("""
+            SELECT id, username, password, pregunta_1, respuesta_1, pregunta_2, respuesta_2, pregunta_3, respuesta_3
+            FROM usuarios WHERE nivel = 'admin' LIMIT 1
+        """)
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return {
+                'success': True,
+                'data': {
+                    'id': row[0],
+                    'username': row[1],
+                    'password': row[2],
+                    'pregunta_1': row[3] or '',
+                    'respuesta_1': row[4] or '',
+                    'pregunta_2': row[5] or '',
+                    'respuesta_2': row[6] or '',
+                    'pregunta_3': row[7] or '',
+                    'respuesta_3': row[8] or '',
+                }
+            }
+        return {'success': False, 'error': 'No se encontró la cuenta de administrador'}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def update_admin_account(new_username, new_password, p1, r1, p2, r2, p3, r3):
+    """Permite al administrador modificar su usuario, contraseña y sus 3 preguntas/respuestas (en mayúsculas)."""
+    try:
+        new_username = new_username.strip()
+        new_password = new_password.strip()
+        p1, r1 = p1.strip().upper(), r1.strip().upper()
+        p2, r2 = p2.strip().upper(), r2.strip().upper()
+        p3, r3 = p3.strip().upper(), r3.strip().upper()
+
+        if not new_username or not new_password:
+            return {'success': False, 'error': 'El usuario y la contraseña no pueden estar vacíos'}
+        if not p1 or not r1 or not p2 or not r2 or not p3 or not r3:
+            return {'success': False, 'error': 'Debes completar las 3 preguntas y 3 respuestas de seguridad'}
+
+        conn = get_conn()
+        cursor = conn.cursor()
+
+        # Comprobar si otro usuario ya tiene ese nombre
+        cursor.execute("SELECT id FROM usuarios WHERE username = ? AND nivel != 'admin'", (new_username,))
+        if cursor.fetchone():
+            conn.close()
+            return {'success': False, 'error': 'Ese nombre de usuario ya está en uso'}
+
+        cursor.execute("""
+            UPDATE usuarios SET
+                username = ?,
+                password = ?,
+                pregunta_1 = ?,
+                respuesta_1 = ?,
+                pregunta_2 = ?,
+                respuesta_2 = ?,
+                pregunta_3 = ?,
+                respuesta_3 = ?
+            WHERE nivel = 'admin'
+        """, (new_username, new_password, p1, r1, p2, r2, p3, r3))
+        conn.commit()
+        conn.close()
+        return {'success': True, 'new_username': new_username}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def register(username, password, nivel, p1='', r1='', p2='', r2='', p3='', r3=''):
+    try:
+        username = username.strip()
+        password = password.strip()
+        p1, r1 = p1.strip().upper(), r1.strip().upper()
+        p2, r2 = p2.strip().upper(), r2.strip().upper()
+        p3, r3 = p3.strip().upper(), r3.strip().upper()
+
+        if not username or not password:
+            return {'success': False, 'error': 'Completa usuario y contraseña'}
+        if not p1 or not r1 or not p2 or not r2 or not p3 or not r3:
+            return {'success': False, 'error': 'Debes configurar las 3 preguntas y respuestas de seguridad'}
+
+        conn = get_conn()
+        cursor = conn.cursor()
         cursor.execute("SELECT id FROM usuarios WHERE username = ?", (username,))
         if cursor.fetchone():
             conn.close()
             return {'success': False, 'error': 'El usuario ya existe'}
             
-        cursor.execute("INSERT INTO usuarios (username, password, nivel) VALUES (?, ?, ?)", (username, password, nivel))
+        cursor.execute("""
+            INSERT INTO usuarios (username, password, nivel, pregunta_1, respuesta_1, pregunta_2, respuesta_2, pregunta_3, respuesta_3)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (username, password, nivel, p1, r1, p2, r2, p3, r3))
         conn.commit()
         conn.close()
         return {'success': True}
@@ -137,10 +273,265 @@ def get_users():
     try:
         conn = get_conn()
         cursor = conn.cursor()
-        cursor.execute("SELECT id, username, nivel FROM usuarios WHERE username != 'admin'")
+        cursor.execute("SELECT id, username, nivel FROM usuarios WHERE nivel != 'admin'")
         rows = cursor.fetchall()
         conn.close()
         return {'success': True, 'users': [{'id': r[0], 'username': r[1], 'nivel': r[2]} for r in rows]}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def delete_user(user_id):
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM usuarios WHERE id = ? AND nivel != 'admin'", (user_id,))
+        conn.commit()
+        conn.close()
+        return {'success': True}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def get_teacher_account(teacher_id):
+    """Obtiene los datos completos de un profesor para que el admin lo modifique."""
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, username, password, nivel, pregunta_1, respuesta_1, pregunta_2, respuesta_2, pregunta_3, respuesta_3
+            FROM usuarios WHERE id = ? AND nivel != 'admin'
+        """, (teacher_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return {
+                'success': True,
+                'data': {
+                    'id': row[0],
+                    'username': row[1],
+                    'password': row[2],
+                    'nivel': row[3],
+                    'pregunta_1': row[4] or '',
+                    'respuesta_1': row[5] or '',
+                    'pregunta_2': row[6] or '',
+                    'respuesta_2': row[7] or '',
+                    'pregunta_3': row[8] or '',
+                    'respuesta_3': row[9] or '',
+                }
+            }
+        return {'success': False, 'error': 'Profesor no encontrado'}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def update_teacher_account(teacher_id, username, new_password, nivel, p1, r1, p2, r2, p3, r3):
+    """Permite al administrador modificar un profesor incluyendo usuario, contraseña, nivel y preguntas de seguridad."""
+    try:
+        username = username.strip()
+        new_password = new_password.strip()
+        p1, r1 = p1.strip().upper(), r1.strip().upper()
+        p2, r2 = p2.strip().upper(), r2.strip().upper()
+        p3, r3 = p3.strip().upper(), r3.strip().upper()
+
+        if not username:
+            return {'success': False, 'error': 'El nombre de usuario no puede estar vacío'}
+        if not p1 or not r1 or not p2 or not r2 or not p3 or not r3:
+            return {'success': False, 'error': 'Debes completar las 3 preguntas y 3 respuestas de seguridad'}
+
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM usuarios WHERE username = ? AND id != ?", (username, teacher_id))
+        if cursor.fetchone():
+            conn.close()
+            return {'success': False, 'error': 'Ese nombre de usuario ya está en uso por otra cuenta'}
+
+        if new_password:
+            cursor.execute("""
+                UPDATE usuarios SET
+                    username = ?,
+                    password = ?,
+                    nivel = ?,
+                    pregunta_1 = ?,
+                    respuesta_1 = ?,
+                    pregunta_2 = ?,
+                    respuesta_2 = ?,
+                    pregunta_3 = ?,
+                    respuesta_3 = ?
+                WHERE id = ? AND nivel != 'admin'
+            """, (username, new_password, nivel, p1, r1, p2, r2, p3, r3, teacher_id))
+        else:
+            cursor.execute("""
+                UPDATE usuarios SET
+                    username = ?,
+                    nivel = ?,
+                    pregunta_1 = ?,
+                    respuesta_1 = ?,
+                    pregunta_2 = ?,
+                    respuesta_2 = ?,
+                    pregunta_3 = ?,
+                    respuesta_3 = ?
+                WHERE id = ? AND nivel != 'admin'
+            """, (username, nivel, p1, r1, p2, r2, p3, r3, teacher_id))
+
+        conn.commit()
+        conn.close()
+        return {'success': True}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def get_security_question(username, exclude_index=None):
+    """Devuelve aleatoriamente una de las 3 preguntas de seguridad configuradas para la cuenta."""
+    try:
+        username = username.strip()
+        if not username:
+            return {'success': False, 'error': 'Ingresa un nombre de usuario'}
+
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT username, pregunta_1, respuesta_1, pregunta_2, respuesta_2, pregunta_3, respuesta_3
+            FROM usuarios WHERE username = ?
+        """, (username,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            return {'success': False, 'error': 'No se encontró ninguna cuenta con ese usuario'}
+
+        questions = []
+        if row[1] and row[2]:
+            questions.append((1, row[1]))
+        if row[3] and row[4]:
+            questions.append((2, row[3]))
+        if row[5] and row[6]:
+            questions.append((3, row[5]))
+
+        if not questions:
+            return {'success': False, 'error': 'Esta cuenta no tiene preguntas de seguridad configuradas'}
+
+        # Si se solicita excluir el índice actual (para 'probar otra pregunta')
+        candidates = [q for q in questions if q[0] != exclude_index]
+        if not candidates:
+            candidates = questions
+
+        chosen = random.choice(candidates)
+        return {
+            'success': True,
+            'username': row[0],
+            'question_index': chosen[0],
+            'question': chosen[1],
+            'total_questions': len(questions)
+        }
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def verify_security_answer(username, question_index, answer):
+    """Verifica si la respuesta a la pregunta indicada es correcta (comparación en mayúsculas)."""
+    try:
+        username = username.strip()
+        answer = answer.strip().upper()
+        if not username or not answer:
+            return {'success': False, 'error': 'Debes ingresar tu respuesta'}
+
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT username, password, respuesta_1, respuesta_2, respuesta_3
+            FROM usuarios WHERE username = ?
+        """, (username,))
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            return {'success': False, 'error': 'Usuario no encontrado'}
+
+        respuestas_map = {1: row[2], 2: row[3], 3: row[4]}
+        expected = (respuestas_map.get(int(question_index)) or '').strip().upper()
+
+        if expected and answer == expected:
+            return {
+                'success': True,
+                'username': row[0],
+                'password': row[1]
+            }
+        else:
+            return {'success': False, 'error': 'Respuesta incorrecta. Verifica e intenta nuevamente.'}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def get_user_security(user_id):
+    """Permite a un usuario consultar sus preguntas de seguridad."""
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, username, pregunta_1, respuesta_1, pregunta_2, respuesta_2, pregunta_3, respuesta_3
+            FROM usuarios WHERE id = ?
+        """, (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            return {
+                'success': True,
+                'data': {
+                    'id': row[0],
+                    'username': row[1],
+                    'pregunta_1': row[2] or '',
+                    'respuesta_1': row[3] or '',
+                    'pregunta_2': row[4] or '',
+                    'respuesta_2': row[5] or '',
+                    'pregunta_3': row[6] or '',
+                    'respuesta_3': row[7] or '',
+                }
+            }
+        return {'success': False, 'error': 'Usuario no encontrado'}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def update_user_security(user_id, new_password, p1, r1, p2, r2, p3, r3):
+    """Permite a un usuario actualizar su contraseña y sus 3 preguntas y respuestas de seguridad."""
+    try:
+        p1, r1 = p1.strip().upper(), r1.strip().upper()
+        p2, r2 = p2.strip().upper(), r2.strip().upper()
+        p3, r3 = p3.strip().upper(), r3.strip().upper()
+
+        if not p1 or not r1 or not p2 or not r2 or not p3 or not r3:
+            return {'success': False, 'error': 'Debes completar las 3 preguntas y 3 respuestas de seguridad'}
+
+        conn = get_conn()
+        cursor = conn.cursor()
+        if new_password and new_password.strip():
+            cursor.execute("""
+                UPDATE usuarios SET
+                    password = ?,
+                    pregunta_1 = ?,
+                    respuesta_1 = ?,
+                    pregunta_2 = ?,
+                    respuesta_2 = ?,
+                    pregunta_3 = ?,
+                    respuesta_3 = ?
+                WHERE id = ?
+            """, (new_password.strip(), p1, r1, p2, r2, p3, r3, user_id))
+        else:
+            cursor.execute("""
+                UPDATE usuarios SET
+                    pregunta_1 = ?,
+                    respuesta_1 = ?,
+                    pregunta_2 = ?,
+                    respuesta_2 = ?,
+                    pregunta_3 = ?,
+                    respuesta_3 = ?
+                WHERE id = ?
+            """, (p1, r1, p2, r2, p3, r3, user_id))
+
+        conn.commit()
+        conn.close()
+        return {'success': True}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 import base64

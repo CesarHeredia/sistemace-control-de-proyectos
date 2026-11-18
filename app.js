@@ -36,8 +36,26 @@ const studentForm = $('studentForm');
 const hamburger = $('hamburger');
 const sidebar = $('sidebar');
 
-// ============ AUTH TABS ============
-// Removed.
+// ============ PASSWORD VISIBILITY TOGGLE ============
+function togglePasswordVisibility(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const icon = btn.querySelector('i');
+  if (input.type === 'password') {
+    input.type = 'text';
+    if (icon) {
+      icon.classList.remove('fa-eye');
+      icon.classList.add('fa-eye-slash');
+    }
+  } else {
+    input.type = 'password';
+    if (icon) {
+      icon.classList.remove('fa-eye-slash');
+      icon.classList.add('fa-eye');
+    }
+  }
+}
+window.togglePasswordVisibility = togglePasswordVisibility;
 
 // ============ LOGIN ============
 loginForm.addEventListener('submit', async (e) => {
@@ -70,47 +88,185 @@ function loginSuccess() {
   }
 }
 
-// ============ REGISTER ============
+// ============ ADMIN HUB NAVIGATION ============
+function showAdminSection(sec) {
+  const hub = $('adminHub');
+  const viewAcc = $('viewAdminAccount');
+  const viewReg = $('viewRegisterTeacher');
+  const viewMan = $('viewManageTeachers');
+
+  if (hub) hub.style.display = (sec === 'hub') ? 'block' : 'none';
+  if (viewAcc) viewAcc.style.display = (sec === 'account') ? 'block' : 'none';
+  if (viewReg) viewReg.style.display = (sec === 'register') ? 'block' : 'none';
+  if (viewMan) viewMan.style.display = (sec === 'manage') ? 'block' : 'none';
+
+  if (sec === 'account') loadAdminAccountData();
+  if (sec === 'manage') loadTeachersList();
+  if (sec === 'register' && registerForm) {
+    registerForm.reset();
+    const rErr = $('registerError');
+    const rSucc = $('registerSuccess');
+    if (rErr) rErr.style.display = 'none';
+    if (rSucc) rSucc.style.display = 'none';
+  }
+}
+window.showAdminSection = showAdminSection;
+
+if ($('btnOpenAdminAccount')) {
+  $('btnOpenAdminAccount').addEventListener('click', () => showAdminSection('account'));
+}
+if ($('btnOpenRegisterTeacher')) {
+  $('btnOpenRegisterTeacher').addEventListener('click', () => showAdminSection('register'));
+}
+if ($('btnOpenManageTeachers')) {
+  $('btnOpenManageTeachers').addEventListener('click', () => showAdminSection('manage'));
+}
+
+// ============ ADMIN ACCOUNT SETTINGS ============
+async function loadAdminAccountData() {
+  const userInp = $('adminEditUser');
+  const passInp = $('adminEditPass');
+  const confInp = $('adminEditPassConfirm');
+  if (!userInp) return;
+
+  const err = $('adminAccountError');
+  const succ = $('adminAccountSuccess');
+  if (err) err.style.display = 'none';
+  if (succ) succ.style.display = 'none';
+
+  const res = await eel.get_admin_account()();
+  if (res.success && res.data) {
+    userInp.value = res.data.username;
+    passInp.value = res.data.password;
+    confInp.value = res.data.password;
+    $('adminP1').value = res.data.pregunta_1 || '';
+    $('adminR1').value = res.data.respuesta_1 || '';
+    $('adminP2').value = res.data.pregunta_2 || '';
+    $('adminR2').value = res.data.respuesta_2 || '';
+    $('adminP3').value = res.data.pregunta_3 || '';
+    $('adminR3').value = res.data.respuesta_3 || '';
+  }
+}
+
+const adminAccountForm = $('adminAccountForm');
+if (adminAccountForm) {
+  adminAccountForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errorEl = $('adminAccountError');
+    const successEl = $('adminAccountSuccess');
+    errorEl.style.display = 'none';
+    successEl.style.display = 'none';
+
+    const newUsername = $('adminEditUser').value.trim();
+    const newPass = $('adminEditPass').value.trim();
+    const newPassConf = $('adminEditPassConfirm').value.trim();
+    const p1 = $('adminP1').value.trim().toUpperCase();
+    const r1 = $('adminR1').value.trim().toUpperCase();
+    const p2 = $('adminP2').value.trim().toUpperCase();
+    const r2 = $('adminR2').value.trim().toUpperCase();
+    const p3 = $('adminP3').value.trim().toUpperCase();
+    const r3 = $('adminR3').value.trim().toUpperCase();
+
+    if (!newUsername || !newPass) {
+      errorEl.textContent = 'El usuario y la contraseña no pueden estar vacíos';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    if (newPass !== newPassConf) {
+      errorEl.textContent = 'Las contraseñas no coinciden';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    if (newPass.length < 4) {
+      errorEl.textContent = 'La contraseña debe tener al menos 4 caracteres';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    if (!p1 || !r1 || !p2 || !r2 || !p3 || !r3) {
+      errorEl.textContent = 'Debes completar las 3 preguntas y 3 respuestas de seguridad en MAYÚSCULAS';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    const btn = $('btnSaveAdminAccount');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+
+    const res = await eel.update_admin_account(newUsername, newPass, p1, r1, p2, r2, p3, r3)();
+
+    btn.disabled = false;
+    btn.innerHTML = '<span>Guardar Cambios</span> <i class="fas fa-save"></i>';
+
+    if (res.success) {
+      if (currentUser) currentUser.username = res.new_username;
+      successEl.style.display = 'block';
+      setTimeout(() => {
+        successEl.style.display = 'none';
+        showAdminSection('hub');
+      }, 1500);
+    } else {
+      errorEl.textContent = res.error || 'Error al actualizar cuenta';
+      errorEl.style.display = 'block';
+    }
+  });
+}
+
+// ============ REGISTER TEACHER ============
 registerForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const username = $('regUser').value.trim();
   const password = $('regPass').value.trim();
   const confirm = $('regPassConfirm').value.trim();
   const level = $('regLevel').value;
+  const p1 = $('regP1').value.trim().toUpperCase();
+  const r1 = $('regR1').value.trim().toUpperCase();
+  const p2 = $('regP2').value.trim().toUpperCase();
+  const r2 = $('regR2').value.trim().toUpperCase();
+  const p3 = $('regP3').value.trim().toUpperCase();
+  const r3 = $('regR3').value.trim().toUpperCase();
 
-  registerError.classList.remove('show');
-  registerSuccess.classList.remove('show');
+  registerError.style.display = 'none';
+  registerSuccess.style.display = 'none';
 
   if (!username || !password || !confirm) {
-    registerError.textContent = 'Completa todos los campos';
-    registerError.classList.add('show');
+    registerError.textContent = 'Completa todos los campos obligatorios';
+    registerError.style.display = 'block';
     return;
   }
 
   if (password !== confirm) {
     registerError.textContent = 'Las contraseñas no coinciden';
-    registerError.classList.add('show');
+    registerError.style.display = 'block';
     return;
   }
 
   if (password.length < 4) {
     registerError.textContent = 'La contraseña debe tener al menos 4 caracteres';
-    registerError.classList.add('show');
+    registerError.style.display = 'block';
     return;
   }
 
-  const response = await eel.register(username, password, level)();
+  if (!p1 || !r1 || !p2 || !r2 || !p3 || !r3) {
+    registerError.textContent = 'Debes completar las 3 preguntas y 3 respuestas de seguridad para el profesor';
+    registerError.style.display = 'block';
+    return;
+  }
+
+  const response = await eel.register(username, password, level, p1, r1, p2, r2, p3, r3)();
 
   if (response.success) {
     registerForm.reset();
-    registerSuccess.classList.add('show');
-    loadTeachersList();
+    registerSuccess.style.display = 'block';
     setTimeout(() => {
-      registerSuccess.classList.remove('show');
+      registerSuccess.style.display = 'none';
+      showAdminSection('manage');
     }, 1500);
   } else {
-    registerError.textContent = response.error || 'Error al registrar';
-    registerError.classList.add('show');
+    registerError.textContent = response.error || 'Error al registrar profesor';
+    registerError.style.display = 'block';
   }
 });
 
@@ -122,7 +278,7 @@ function showScreen(screen) {
   if (screen === 'dashboard') dashboardScreen.classList.add('active');
   if (screen === 'admin') {
     $('adminScreen').style.display = 'block';
-    loadTeachersList();
+    showAdminSection('hub');
   }
 }
 
@@ -130,7 +286,7 @@ async function loadTeachersList() {
   const tbody = $('teachersListBody');
   const emptyMsg = $('teachersEmpty');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="2" style="text-align: center; padding: 10px;">Cargando...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 18px; color: #64748b;"><i class="fas fa-spinner fa-spin"></i> Cargando profesores...</td></tr>';
   
   const res = await eel.get_users()();
   if (res.success) {
@@ -140,15 +296,145 @@ async function loadTeachersList() {
     } else {
       emptyMsg.style.display = 'none';
       tbody.innerHTML = res.users.map(u => `
-        <tr style="border-bottom: 1px solid #e2e8f0;">
-          <td style="padding: 10px; font-weight: 500; color: #1e293b;">${u.username}</td>
-          <td style="padding: 10px; color: #475569;">${levelNames[u.nivel] || u.nivel}</td>
+        <tr style="border-bottom: 1px solid #f1f5f9;">
+          <td style="padding: 12px; font-weight: 600; color: #1e293b;">
+            <i class="fas fa-user-tie" style="color: #4f46e5; margin-right: 8px;"></i> ${u.username}
+          </td>
+          <td style="padding: 12px; color: #475569;">${levelNames[u.nivel] || u.nivel}</td>
+          <td style="padding: 12px; text-align: right; white-space: nowrap;">
+            <button onclick="openEditTeacherModal(${u.id})" style="background: #fef3c7; color: #d97706; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 0.82rem; font-weight: 600; margin-right: 8px;" title="Modificar cuenta del profesor">
+              <i class="fas fa-edit"></i> Modificar
+            </button>
+            <button onclick="deleteTeacherUser(${u.id}, '${u.username}')" style="background: #fee2e2; color: #dc2626; border: none; padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 0.82rem; font-weight: 600;" title="Eliminar profesor">
+              <i class="fas fa-trash-alt"></i> Eliminar
+            </button>
+          </td>
         </tr>
       `).join('');
     }
   } else {
-    tbody.innerHTML = '<tr><td colspan="2" style="text-align: center; color: red; padding: 10px;">Error al cargar</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: #ef4444; padding: 12px;">Error al cargar lista</td></tr>';
   }
+}
+
+async function deleteTeacherUser(userId, username) {
+  if (!confirm(`¿Estás seguro de que deseas eliminar la cuenta del profesor "${username}"?`)) return;
+  const res = await eel.delete_user(userId)();
+  if (res.success) {
+    loadTeachersList();
+  } else {
+    alert('Error al eliminar: ' + res.error);
+  }
+}
+window.deleteTeacherUser = deleteTeacherUser;
+window.loadTeachersList = loadTeachersList;
+
+// ============ MODAL MODIFICAR PROFESOR ============
+const modalEditTeacher = $('modalEditTeacher');
+
+async function openEditTeacherModal(teacherId) {
+  const errorEl = $('editTeacherError');
+  const successEl = $('editTeacherSuccess');
+  if (errorEl) errorEl.style.display = 'none';
+  if (successEl) successEl.style.display = 'none';
+
+  const res = await eel.get_teacher_account(teacherId)();
+  if (res.success && res.data) {
+    $('editTeacherId').value = res.data.id;
+    $('editTeacherUser').value = res.data.username;
+    $('editTeacherPass').value = '';
+    $('editTeacherPassConfirm').value = '';
+    $('editTeacherLevel').value = res.data.nivel;
+    $('editTeacherP1').value = res.data.pregunta_1 || '';
+    $('editTeacherR1').value = res.data.respuesta_1 || '';
+    $('editTeacherP2').value = res.data.pregunta_2 || '';
+    $('editTeacherR2').value = res.data.respuesta_2 || '';
+    $('editTeacherP3').value = res.data.pregunta_3 || '';
+    $('editTeacherR3').value = res.data.respuesta_3 || '';
+
+    if (modalEditTeacher) modalEditTeacher.style.display = 'flex';
+  } else {
+    alert(res.error || 'No se pudo cargar la información del profesor');
+  }
+}
+
+function closeEditTeacherModal() {
+  if (modalEditTeacher) modalEditTeacher.style.display = 'none';
+}
+
+window.openEditTeacherModal = openEditTeacherModal;
+window.closeEditTeacherModal = closeEditTeacherModal;
+
+if ($('btnCloseEditTeacher')) $('btnCloseEditTeacher').addEventListener('click', closeEditTeacherModal);
+if ($('btnCancelEditTeacher')) $('btnCancelEditTeacher').addEventListener('click', closeEditTeacherModal);
+
+const editTeacherForm = $('editTeacherForm');
+if (editTeacherForm) {
+  editTeacherForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errorEl = $('editTeacherError');
+    const successEl = $('editTeacherSuccess');
+    errorEl.style.display = 'none';
+    successEl.style.display = 'none';
+
+    const teacherId = parseInt($('editTeacherId').value);
+    const username = $('editTeacherUser').value.trim();
+    const newPass = $('editTeacherPass').value.trim();
+    const newPassConf = $('editTeacherPassConfirm').value.trim();
+    const nivel = $('editTeacherLevel').value;
+    const p1 = $('editTeacherP1').value.trim().toUpperCase();
+    const r1 = $('editTeacherR1').value.trim().toUpperCase();
+    const p2 = $('editTeacherP2').value.trim().toUpperCase();
+    const r2 = $('editTeacherR2').value.trim().toUpperCase();
+    const p3 = $('editTeacherP3').value.trim().toUpperCase();
+    const r3 = $('editTeacherR3').value.trim().toUpperCase();
+
+    if (!username) {
+      errorEl.textContent = 'El nombre de usuario no puede estar vacío';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    if (newPass) {
+      if (newPass !== newPassConf) {
+        errorEl.textContent = 'Las contraseñas no coinciden';
+        errorEl.style.display = 'block';
+        return;
+      }
+      if (newPass.length < 4) {
+        errorEl.textContent = 'La contraseña debe tener al menos 4 caracteres';
+        errorEl.style.display = 'block';
+        return;
+      }
+    }
+
+    if (!p1 || !r1 || !p2 || !r2 || !p3 || !r3) {
+      errorEl.textContent = 'Debes completar las 3 preguntas y 3 respuestas de seguridad en MAYÚSCULAS';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    const btn = $('btnSaveEditTeacher');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+
+    const res = await eel.update_teacher_account(teacherId, username, newPass, nivel, p1, r1, p2, r2, p3, r3)();
+
+    btn.disabled = false;
+    btn.innerHTML = '<span>Guardar Cambios</span> <i class="fas fa-save"></i>';
+
+    if (res.success) {
+      successEl.style.display = 'block';
+      loadTeachersList();
+      setTimeout(() => {
+        successEl.style.display = 'none';
+        closeEditTeacherModal();
+      }, 1500);
+    } else {
+      errorEl.textContent = res.error || 'Error al actualizar profesor';
+      errorEl.style.display = 'block';
+    }
+  });
 }
 
 // ============ SIDEBAR USER ============
@@ -1340,6 +1626,328 @@ document.addEventListener('click', (e) => {
     sidebar.classList.remove('open');
   }
 });
+
+// ============ RECUPERACIÓN DE CONTRASEÑA ============
+let recoveryUsername = '';
+let currentQuestionIndex = null;
+
+const recoveryModal = $('recoveryModal');
+const recStep1 = $('recoveryStep1');
+const recStep2 = $('recoveryStep2');
+const recStep3 = $('recoveryStep3');
+const recError1 = $('recError1');
+const recError2 = $('recError2');
+
+function openRecoveryModal() {
+  recoveryUsername = '';
+  currentQuestionIndex = null;
+  if ($('recUsernameInput')) $('recUsernameInput').value = '';
+  if ($('recAnswerInput')) $('recAnswerInput').value = '';
+  if (recError1) { recError1.textContent = ''; recError1.style.display = 'none'; }
+  if (recError2) { recError2.textContent = ''; recError2.style.display = 'none'; }
+
+  recStep1.style.display = 'block';
+  recStep2.style.display = 'none';
+  recStep3.style.display = 'none';
+
+  recoveryModal.style.display = 'flex';
+  setTimeout(() => { if ($('recUsernameInput')) $('recUsernameInput').focus(); }, 100);
+}
+
+function closeRecoveryModal() {
+  recoveryModal.style.display = 'none';
+}
+
+if ($('btnOpenRecovery')) {
+  $('btnOpenRecovery').addEventListener('click', openRecoveryModal);
+}
+if ($('btnCloseRecoveryModal')) {
+  $('btnCloseRecoveryModal').addEventListener('click', closeRecoveryModal);
+}
+if ($('btnCancelRec1')) {
+  $('btnCancelRec1').addEventListener('click', closeRecoveryModal);
+}
+
+// Paso 1: Buscar usuario y obtener una pregunta aleatoria
+if ($('btnSubmitUser')) {
+  $('btnSubmitUser').addEventListener('click', async () => {
+    const username = $('recUsernameInput').value.trim();
+    recError1.style.display = 'none';
+
+    if (!username) {
+      recError1.textContent = 'Por favor ingresa tu nombre de usuario';
+      recError1.style.display = 'block';
+      return;
+    }
+
+    const btn = $('btnSubmitUser');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+    const res = await eel.get_security_question(username)();
+
+    btn.disabled = false;
+    btn.innerHTML = '<span>Continuar</span> <i class="fas fa-arrow-right"></i>';
+
+    if (res.success) {
+      recoveryUsername = res.username;
+      currentQuestionIndex = res.question_index;
+
+      $('recUserDisplay').textContent = recoveryUsername;
+      $('recQuestionDisplay').textContent = `"${res.question}"`;
+      $('recAnswerInput').value = '';
+      recError2.style.display = 'none';
+
+      recStep1.style.display = 'none';
+      recStep2.style.display = 'block';
+      setTimeout(() => { $('recAnswerInput').focus(); }, 100);
+    } else {
+      recError1.textContent = res.error || 'No se encontró el usuario';
+      recError1.style.display = 'block';
+    }
+  });
+
+  // Permitir presionar Enter en el input de usuario
+  if ($('recUsernameInput')) {
+    $('recUsernameInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        $('btnSubmitUser').click();
+      }
+    });
+  }
+}
+
+// Cambiar de pregunta (probar otra de las 3 preguntas)
+if ($('btnTryAnotherQuestion')) {
+  $('btnTryAnotherQuestion').addEventListener('click', async () => {
+    const btn = $('btnTryAnotherQuestion');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Buscando otra pregunta...';
+
+    const res = await eel.get_security_question(recoveryUsername, currentQuestionIndex)();
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-sync-alt"></i> Probar con otra de mis preguntas';
+
+    if (res.success) {
+      currentQuestionIndex = res.question_index;
+      $('recQuestionDisplay').textContent = `"${res.question}"`;
+      $('recAnswerInput').value = '';
+      recError2.style.display = 'none';
+      $('recAnswerInput').focus();
+    }
+  });
+}
+
+// Volver al Paso 1
+if ($('btnBackToStep1')) {
+  $('btnBackToStep1').addEventListener('click', () => {
+    recStep2.style.display = 'none';
+    recStep1.style.display = 'block';
+    $('recUsernameInput').focus();
+  });
+}
+
+// Paso 2: Verificar respuesta
+if ($('btnVerifyAnswer')) {
+  $('btnVerifyAnswer').addEventListener('click', async () => {
+    const answer = $('recAnswerInput').value.trim().toUpperCase();
+    recError2.style.display = 'none';
+
+    if (!answer) {
+      recError2.textContent = 'Por favor ingresa tu respuesta en MAYÚSCULAS';
+      recError2.style.display = 'block';
+      return;
+    }
+
+    const btn = $('btnVerifyAnswer');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+    const res = await eel.verify_security_answer(recoveryUsername, currentQuestionIndex, answer)();
+
+    btn.disabled = false;
+    btn.innerHTML = '<span>Verificar</span> <i class="fas fa-check"></i>';
+
+    if (res.success) {
+      $('recResultUser').value = res.username;
+      $('recResultPass').value = res.password;
+
+      recStep2.style.display = 'none';
+      recStep3.style.display = 'block';
+    } else {
+      recError2.textContent = res.error || 'Respuesta incorrecta';
+      recError2.style.display = 'block';
+    }
+  });
+
+  // Permitir presionar Enter en el input de respuesta
+  if ($('recAnswerInput')) {
+    $('recAnswerInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        $('btnVerifyAnswer').click();
+      }
+    });
+  }
+}
+
+// Copiar Usuario
+if ($('btnCopyUser')) {
+  $('btnCopyUser').addEventListener('click', () => {
+    const val = $('recResultUser').value;
+    if (!val) return;
+    navigator.clipboard.writeText(val).then(() => {
+      const btn = $('btnCopyUser');
+      const originalHTML = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-check"></i> <span>¡Copiado!</span>';
+      btn.style.background = '#059669';
+      setTimeout(() => {
+        btn.innerHTML = originalHTML;
+        btn.style.background = '#4f46e5';
+      }, 1800);
+    }).catch(err => {
+      alert('Usuario copiado: ' + val);
+    });
+  });
+}
+
+// Copiar Contraseña
+if ($('btnCopyPass')) {
+  $('btnCopyPass').addEventListener('click', () => {
+    const val = $('recResultPass').value;
+    if (!val) return;
+    navigator.clipboard.writeText(val).then(() => {
+      const btn = $('btnCopyPass');
+      const originalHTML = btn.innerHTML;
+      btn.innerHTML = '<i class="fas fa-check"></i> <span>¡Copiado!</span>';
+      btn.style.background = '#059669';
+      setTimeout(() => {
+        btn.innerHTML = originalHTML;
+        btn.style.background = '#10b981';
+      }, 1800);
+    }).catch(err => {
+      alert('Contraseña copiada: ' + val);
+    });
+  });
+}
+
+// Ir a Iniciar Sesión desde Paso 3
+if ($('btnGoToLogin')) {
+  $('btnGoToLogin').addEventListener('click', () => {
+    closeRecoveryModal();
+    if ($('username')) {
+      $('username').value = recoveryUsername;
+    }
+    if ($('password')) {
+      $('password').value = '';
+      $('password').focus();
+    }
+  });
+}
+
+// ============ SEGURIDAD DE MI CUENTA (DOCENTES) ============
+const userSecurityModal = $('userSecurityModal');
+
+async function openUserSecurityModal() {
+  if (!currentUser || !currentUser.id) return;
+  const errorEl = $('secError');
+  const successEl = $('secSuccess');
+  if (errorEl) errorEl.style.display = 'none';
+  if (successEl) successEl.style.display = 'none';
+  if ($('secNewPass')) $('secNewPass').value = '';
+  if ($('secNewPassConfirm')) $('secNewPassConfirm').value = '';
+
+  $('secUsernameDisplay').value = currentUser.username;
+
+  const res = await eel.get_user_security(currentUser.id)();
+  if (res.success && res.data) {
+    $('secP1').value = res.data.pregunta_1 || '';
+    $('secR1').value = res.data.respuesta_1 || '';
+    $('secP2').value = res.data.pregunta_2 || '';
+    $('secR2').value = res.data.respuesta_2 || '';
+    $('secP3').value = res.data.pregunta_3 || '';
+    $('secR3').value = res.data.respuesta_3 || '';
+  }
+
+  userSecurityModal.style.display = 'flex';
+}
+
+function closeUserSecurityModal() {
+  if (userSecurityModal) userSecurityModal.style.display = 'none';
+}
+
+if ($('btnOpenUserSecurity')) {
+  $('btnOpenUserSecurity').addEventListener('click', openUserSecurityModal);
+}
+if ($('btnCloseUserSecurity')) {
+  $('btnCloseUserSecurity').addEventListener('click', closeUserSecurityModal);
+}
+if ($('btnCancelUserSecurity')) {
+  $('btnCancelUserSecurity').addEventListener('click', closeUserSecurityModal);
+}
+
+const userSecurityForm = $('userSecurityForm');
+if (userSecurityForm) {
+  userSecurityForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errorEl = $('secError');
+    const successEl = $('secSuccess');
+    errorEl.style.display = 'none';
+    successEl.style.display = 'none';
+
+    const newPass = $('secNewPass').value.trim();
+    const newPassConf = $('secNewPassConfirm').value.trim();
+    const p1 = $('secP1').value.trim().toUpperCase();
+    const r1 = $('secR1').value.trim().toUpperCase();
+    const p2 = $('secP2').value.trim().toUpperCase();
+    const r2 = $('secR2').value.trim().toUpperCase();
+    const p3 = $('secP3').value.trim().toUpperCase();
+    const r3 = $('secR3').value.trim().toUpperCase();
+
+    if (newPass) {
+      if (newPass !== newPassConf) {
+        errorEl.textContent = 'Las contraseñas no coinciden';
+        errorEl.style.display = 'block';
+        return;
+      }
+      if (newPass.length < 4) {
+        errorEl.textContent = 'La contraseña debe tener al menos 4 caracteres';
+        errorEl.style.display = 'block';
+        return;
+      }
+    }
+
+    if (!p1 || !r1 || !p2 || !r2 || !p3 || !r3) {
+      errorEl.textContent = 'Debes completar las 3 preguntas y 3 respuestas de seguridad en MAYÚSCULAS';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    const btn = $('btnSaveUserSecurity');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+
+    const res = await eel.update_user_security(currentUser.id, newPass, p1, r1, p2, r2, p3, r3)();
+
+    btn.disabled = false;
+    btn.innerHTML = '<span>Guardar Cambios</span> <i class="fas fa-save"></i>';
+
+    if (res.success) {
+      successEl.style.display = 'block';
+      if ($('secNewPass')) $('secNewPass').value = '';
+      if ($('secNewPassConfirm')) $('secNewPassConfirm').value = '';
+      setTimeout(() => {
+        successEl.style.display = 'none';
+        closeUserSecurityModal();
+      }, 1800);
+    } else {
+      errorEl.textContent = res.error || 'Error al guardar cambios';
+      errorEl.style.display = 'block';
+    }
+  });
+}
 
 // ============ INIT ============
 showScreen('login');
