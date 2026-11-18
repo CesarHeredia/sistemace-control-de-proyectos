@@ -687,12 +687,31 @@ def upload_nota(alumno_id, periodo, base64_data, filename, anio):
             cursor.execute("UPDATE notas SET archivo_nombre = ?, archivo_ruta = ?, anio = ? WHERE id = ?", (filename, file_path, anio, existing[0]))
         else:
             cursor.execute("INSERT INTO notas (alumno_id, periodo, archivo_nombre, archivo_ruta, anio) VALUES (?, ?, ?, ?, ?)", (alumno_id, periodo, filename, file_path, anio))
+
+        # Si el período termina en " Repitiente", no se dispara lógica de promoción
+        is_repitiente = periodo.endswith(' Repitiente')
+        if is_repitiente:
+            conn.commit()
+            conn.close()
+            return {'success': True}
             
-        # Promotion and cleanup logic for primaria/prescolar
+        # Promotion and cleanup logic for primaria/prescolar and bachillerato
         cursor.execute("SELECT nivel, tipo, ingreso_periodo FROM alumnos WHERE id = ?", (alumno_id,))
         student = cursor.fetchone()
         if student:
             nivel, tipo, ingreso_periodo = student
+
+            def delete_period_note(p_name):
+                cursor.execute("SELECT archivo_ruta FROM notas WHERE alumno_id = ? AND periodo = ?", (alumno_id, p_name))
+                for n_row in cursor.fetchall():
+                    try:
+                        if os.path.exists(n_row[0]):
+                            os.remove(n_row[0])
+                    except Exception:
+                        pass
+                cursor.execute("DELETE FROM notas WHERE alumno_id = ? AND periodo = ?", (alumno_id, p_name))
+
+            # --- Lógica Primaria / Preescolar ---
             if nivel in ('primaria', 'prescolar') and tipo in ('Regular', 'Nuevo Ingreso') and periodo == ingreso_periodo:
                 SEQUENCE_PERIODOS = [
                     '2do Nivel', '3er Nivel',
@@ -701,27 +720,75 @@ def upload_nota(alumno_id, periodo, base64_data, filename, anio):
                 if ingreso_periodo in SEQUENCE_PERIODOS:
                     idx = SEQUENCE_PERIODOS.index(ingreso_periodo)
                     
-                    # 1. Delete the old previous period note
+                    # Eliminar nota repitiente del período actual si existe
+                    delete_period_note(ingreso_periodo + ' Repitiente')
+                    
+                    # Eliminar la nota del período previo
                     if idx > 0:
                         prev_period = SEQUENCE_PERIODOS[idx - 1]
-                        cursor.execute("SELECT archivo_ruta FROM notas WHERE alumno_id = ? AND periodo = ?", (alumno_id, prev_period))
-                        old_note = cursor.fetchone()
-                        if old_note:
-                            try:
-                                if os.path.exists(old_note[0]):
-                                    os.remove(old_note[0])
-                            except Exception:
-                                pass
-                            cursor.execute("DELETE FROM notas WHERE alumno_id = ? AND periodo = ?", (alumno_id, prev_period))
+                        delete_period_note(prev_period)
                     
-                    # 2. Promote student to the next period
+                    # Promover al siguiente período
                     if idx + 1 < len(SEQUENCE_PERIODOS):
                         next_period = SEQUENCE_PERIODOS[idx + 1]
                         next_level = 'primaria' if 'Grado' in next_period else 'prescolar'
                         cursor.execute("UPDATE alumnos SET ingreso_periodo = ?, nivel = ? WHERE id = ?", (next_period, next_level, alumno_id))
                     else:
-                        # Finished 6to Grado: promote to Egresado
+                        # Culminó 6to Grado: pasa a Egresado
                         cursor.execute("UPDATE alumnos SET tipo = 'Egresado', ingreso_periodo = '6to Grado' WHERE id = ?", (alumno_id,))
+
+            # --- Lógica Bachillerato ---
+            elif nivel == 'bachillerato' and tipo in ('Regular', 'Nuevo Ingreso') and periodo == ingreso_periodo:
+                SEQUENCE_BACHILLERATO = ['1er Año', '2do Año', '3er Año', '4to Año', '5to Año']
+                if ingreso_periodo in SEQUENCE_BACHILLERATO:
+                    b_idx = SEQUENCE_BACHILLERATO.index(ingreso_periodo)
+
+                    # Eliminar nota repitiente del período actual si existe
+                    delete_period_note(ingreso_periodo + ' Repitiente')
+
+                    if b_idx == 0:
+                        # 1er Año agregado: se elimina 6to Grado si venía de primaria
+                        delete_period_note('6to Grado')
+                        # Avanza a 2do Año
+                        cursor.execute("UPDATE alumnos SET ingreso_periodo = '2do Año' WHERE id = ?", (alumno_id,))
+
+                    elif b_idx == 1:
+                        # 2do Año agregado: se conserva 1er Año
+                        # Avanza a 3er Año
+                        cursor.execute("UPDATE alumnos SET ingreso_periodo = '3er Año' WHERE id = ?", (alumno_id,))
+
+                    elif b_idx == 2:
+                        # 3er Año agregado: se elimina 1er Año y se conserva 2do Año
+                        delete_period_note('1er Año')
+                        # Avanza a 4to Año
+                        cursor.execute("UPDATE alumnos SET ingreso_periodo = '4to Año' WHERE id = ?", (alumno_id,))
+
+                    elif b_idx == 3:
+                        # 4to Año agregado: se elimina 2do Año y se conserva 3er Año
+                        delete_period_note('2do Año')
+                        # Avanza a 5to Año
+                        cursor.execute("UPDATE alumnos SET ingreso_periodo = '5to Año' WHERE id = ?", (alumno_id,))
+
+                    elif b_idx == 4:
+                        # 5to Año agregado:
+                        # Se eliminan las notas anteriores y repitientes
+                        delete_period_note('1er Año')
+                        delete_period_note('2do Año')
+                        delete_period_note('3er Año')
+                        delete_period_note('4to Año')
+                        delete_period_note('Nota Final')
+                        delete_period_note('Notas Totales')
+                        delete_period_note('1er Año Repitiente')
+                        delete_period_note('2do Año Repitiente')
+                        delete_period_note('3er Año Repitiente')
+                        delete_period_note('4to Año Repitiente')
+                        delete_period_note('5to Año Repitiente')
+
+                        # Esta nota pasa a ser 'Nota Final'
+                        cursor.execute("UPDATE notas SET periodo = 'Nota Final' WHERE alumno_id = ? AND periodo = '5to Año'", (alumno_id,))
+
+                        # El estudiante pasa a ser Egresado (Graduado)
+                        cursor.execute("UPDATE alumnos SET tipo = 'Egresado', ingreso_periodo = '5to Año' WHERE id = ?", (alumno_id,))
                         
         conn.commit()
         conn.close()
@@ -738,6 +805,27 @@ def get_notas(alumno_id):
         rows = cursor.fetchall()
         conn.close()
         return {'success': True, 'notas': {r[0]: {'archivo': r[1], 'anio': r[2]} for r in rows}}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+@eel.expose
+def delete_nota(alumno_id, periodo):
+    """Elimina una nota específica (archivo + registro en BD)."""
+    try:
+        conn = get_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT archivo_ruta FROM notas WHERE alumno_id = ? AND periodo = ?", (alumno_id, periodo))
+        row = cursor.fetchone()
+        if row:
+            try:
+                if os.path.exists(row[0]):
+                    os.remove(row[0])
+            except Exception:
+                pass
+            cursor.execute("DELETE FROM notas WHERE alumno_id = ? AND periodo = ?", (alumno_id, periodo))
+            conn.commit()
+        conn.close()
+        return {'success': True}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 

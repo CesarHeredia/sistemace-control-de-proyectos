@@ -892,9 +892,14 @@
           <h3 style="margin:0;color:#374151;font-size:1rem;font-weight:600;display:flex;align-items:center;gap:8px;">
             <i class="fas fa-folder-open" style="color:#10b981;"></i> Archivos de Notas por Periodo / Año
           </h3>
-          <button id="btnEditAnios" onclick="toggleEditAnios()" style="background:#f59e0b;color:white;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:0.88rem;font-weight:600;display:flex;align-items:center;gap:6px;box-shadow:0 2px 4px rgba(245,158,11,0.2);">
-            <i class="fas fa-edit"></i> Editar Años
-          </button>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button id="btnRepitiente" onclick="toggleRepitiente()" style="display:none;background:#ef4444;color:white;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:0.88rem;font-weight:600;align-items:center;gap:6px;box-shadow:0 2px 4px rgba(239,68,68,0.2);">
+              <i class="fas fa-redo"></i> Repitiente
+            </button>
+            <button id="btnEditAnios" onclick="toggleEditAnios()" style="background:#f59e0b;color:white;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:0.88rem;font-weight:600;display:flex;align-items:center;gap:6px;box-shadow:0 2px 4px rgba(245,158,11,0.2);">
+              <i class="fas fa-edit"></i> Editar Años
+            </button>
+          </div>
         </div>
         <div id="perfilNotas" style="display:flex;flex-direction:column;gap:12px;">
           <!-- Calificaciones dinámicas -->

@@ -5,6 +5,9 @@ let currentUser = null;
 let currentLevel = 'primaria_prescolar';
 let currentTab = 'inicio';
 
+// Estado de modo repitiente por perfil
+let repitienteMode = false;
+
 const levelNames = {
   primaria: 'Primaria',
   prescolar: 'Preescolar',
@@ -832,18 +835,32 @@ function renderNotasModal(nivel) {
     if (nivel === 'primaria_prescolar' || nivel === 'primaria' || nivel === 'prescolar') {
       periodsToShow = ['6to Grado'];
     } else {
-      periodsToShow = ['Notas Totales'];
+      periodsToShow = ['Nota Final'];
     }
   } else if (tipo === 'Nuevo Ingreso' || tipo === 'Regular') {
-    const idx = perList.indexOf(ingresoPeriodo);
-    if (idx > 0) {
-      periodsToShow = [perList[idx - 1]];
+    if (nivel === 'bachillerato') {
+      if (ingresoPeriodo === '1er Año') {
+        periodsToShow = ['6to Grado'];
+      } else if (ingresoPeriodo === '2do Año') {
+        periodsToShow = ['1er Año'];
+      } else if (ingresoPeriodo === '3er Año') {
+        periodsToShow = ['1er Año', '2do Año'];
+      } else if (ingresoPeriodo === '4to Año') {
+        periodsToShow = ['2do Año', '3er Año'];
+      } else if (ingresoPeriodo === '5to Año') {
+        periodsToShow = ['3er Año', '4to Año'];
+      }
     } else {
-      const seqIdx = sequenceOfPeriodos.indexOf(ingresoPeriodo);
-      if (seqIdx > 0) {
-        periodsToShow = [sequenceOfPeriodos[seqIdx - 1]];
+      const idx = perList.indexOf(ingresoPeriodo);
+      if (idx > 0) {
+        periodsToShow = [perList[idx - 1]];
       } else {
-        periodsToShow = [];
+        const seqIdx = sequenceOfPeriodos.indexOf(ingresoPeriodo);
+        if (seqIdx > 0) {
+          periodsToShow = [sequenceOfPeriodos[seqIdx - 1]];
+        } else {
+          periodsToShow = [];
+        }
       }
     }
   }
@@ -1282,6 +1299,11 @@ async function openPerfil(alumnoId) {
   const alumno = students.find(s => s.id === alumnoId);
   if (!alumno) return;
   
+  // Resetear modo repitiente SOLO si es un perfil diferente al actual
+  if (!perfilAlumnoActual || perfilAlumnoActual.id !== alumnoId) {
+    repitienteMode = false;
+  }
+  
   perfilAlumnoActual = alumno;
   
   // Llenar datos del perfil
@@ -1352,16 +1374,22 @@ async function openPerfil(alumnoId) {
   const res = await eel.get_notas(alumnoId)();
   const notasSubidas = res.success ? res.notas : {};
   
+  // Auto-activar repitienteMode si ya existe una nota repitiente guardada para el período actual
+  const isProgressiveCheck = (alumno.tipo === 'Regular' || alumno.tipo === 'Nuevo Ingreso') && alumno.ingreso_periodo;
+  if (isProgressiveCheck && notasSubidas[alumno.ingreso_periodo + ' Repitiente']) {
+    repitienteMode = true;
+  }
+  
   // Determinar la lista de periodos
   let perList = [];
   let entryIdx = -1;
   
   if (alumno.tipo === 'Egresado') {
-    if (alumno.level === 'primaria' || alumno.level === 'prescolar' || alumno.level === 'primaria_prescolar') {
-      const keys = Object.keys(notasSubidas);
-      perList = keys.length > 0 ? keys : ['6to Grado'];
+    const keys = Object.keys(notasSubidas);
+    if (keys.length > 0) {
+      perList = keys;
     } else {
-      perList = ['Notas Totales'];
+      perList = (alumno.level === 'bachillerato') ? ['Nota Final'] : ['6to Grado'];
     }
   } else if (alumno.tipo === 'Nuevo Ingreso' || alumno.tipo === 'Regular') {
     const fullList = periodos[alumno.level] || [];
@@ -1386,84 +1414,182 @@ async function openPerfil(alumnoId) {
   notasContainer.innerHTML = '';
   let hasAnyNote = false;
 
-  // ——— For primaria/prescolar Regular/Nuevo Ingreso: show previous year note + current year upload ———
-  const isPriPre = (alumno.level === 'primaria' || alumno.level === 'prescolar') &&
-                   (alumno.tipo === 'Regular' || alumno.tipo === 'Nuevo Ingreso') &&
-                   alumno.ingreso_periodo;
+  // ——— Para Primaria, Preescolar y Bachillerato Regular / Nuevo Ingreso: Flujo Progresivo ———
+  const isProgressive = (alumno.tipo === 'Regular' || alumno.tipo === 'Nuevo Ingreso') && alumno.ingreso_periodo;
 
-  if (isPriPre) {
-    // Previous year note (read-only view + year before in sequence)
-    const seqIdx2 = sequenceOfPeriodos.indexOf(alumno.ingreso_periodo);
-    const prevPeriod = seqIdx2 > 0 ? sequenceOfPeriodos[seqIdx2 - 1] : null;
-    
-    if (prevPeriod) {
-      const prevNota = notasSubidas[prevPeriod];
-      const prevTiene = !!prevNota;
-      if (prevTiene) hasAnyNote = true;
-      const prevArchivo = prevTiene ? prevNota.archivo : null;
-      const prevAnio = prevTiene && prevNota.anio ? ` (Año: ${prevNota.anio})` : '';
-      const prevBadge = prevTiene
-        ? `<span style="color:#10b981;font-size:0.85em;"><i class="fas fa-check-circle"></i> ${prevArchivo}${prevAnio}</span>`
-        : '<span style="color:#9ca3af;font-size:0.85em;"><i class="fas fa-times-circle"></i> Sin archivo</span>';
-      const prevVerBtn = prevTiene
-        ? `<button onclick="verArchivo(${alumnoId}, '${prevPeriod}')" style="background:#10b981;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;"><i class="fa-solid fa-eye"></i> Ver</button>`
-        : '';
-      
-      const prevRow = document.createElement('div');
-      prevRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;';
-      prevRow.innerHTML = `
-        <div>
-          <span style="font-weight:600;color:#374151;">${prevPeriod}
-            <span style="background:#6b7280;color:white;padding:2px 6px;border-radius:4px;font-size:0.75rem;margin-left:8px;font-weight:normal;">Año Anterior</span>
-          </span><br>
-          <small>${prevBadge}</small>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center;">
-          ${prevVerBtn}
-          <input type="text" id="panio_${alumnoId}_${prevPeriod.replace(/[^a-zA-Z0-9]/g, '_')}" data-periodo="${prevPeriod}" placeholder="Año" style="width:70px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;" value="${prevTiene && prevNota.anio ? prevNota.anio : new Date().getFullYear()}" disabled class="anio-input">
-          <input type="file" id="pfile_${alumnoId}_${prevPeriod.replace(/[^a-zA-Z0-9]/g, '_')}" style="display:none;" onchange="uploadFileFromPerfil(${alumnoId}, '${prevPeriod}', this)">
-          <button onclick="document.getElementById('pfile_${alumnoId}_${prevPeriod.replace(/[^a-zA-Z0-9]/g, '_')}').click()" style="background:#4f46e5;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;">
-            <i class="fas fa-upload"></i> ${prevTiene ? 'Reemplazar' : 'Subir'}
-          </button>
-        </div>
-      `;
-      notasContainer.appendChild(prevRow);
-    }
-
-    // Current year note upload
-    const curPeriod = alumno.ingreso_periodo;
-    const curNota = notasSubidas[curPeriod];
-    const curTiene = !!curNota;
-    if (curTiene) hasAnyNote = true;
-    const curArchivo = curTiene ? curNota.archivo : null;
-    const curAnio = curTiene && curNota.anio ? ` (Año: ${curNota.anio})` : '';
-    const curBadge = curTiene
-      ? `<span style="color:#10b981;font-size:0.85em;"><i class="fas fa-check-circle"></i> ${curArchivo}${curAnio}</span>`
-      : '<span style="color:#ef4444;font-size:0.85em;"><i class="fas fa-exclamation-circle"></i> Pendiente de subir</span>';
-    const curVerBtn = curTiene
-      ? `<button onclick="verArchivo(${alumnoId}, '${curPeriod}')" style="background:#10b981;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;"><i class="fa-solid fa-eye"></i> Ver</button>`
+  // Helper para construir una fila de nota
+  function buildNoteRow({id, period, displayPeriod, notaInfo, labelTag, labelColor, bgColor, borderStyle, isCurrentUpload, isRepitienteUpload, hintText}) {
+    const tiene = !!notaInfo;
+    if (tiene) hasAnyNote = true;
+    const archivo = tiene ? notaInfo.archivo : null;
+    const anioVal = tiene && notaInfo.anio ? ` (Año: ${notaInfo.anio})` : '';
+    const badge = tiene
+      ? `<span style="color:#10b981;font-size:0.85em;"><i class="fas fa-check-circle"></i> ${archivo}${anioVal}</span>`
+      : (isCurrentUpload || isRepitienteUpload
+          ? '<span style="color:#ef4444;font-size:0.85em;"><i class="fas fa-exclamation-circle"></i> Pendiente de subir</span>'
+          : '<span style="color:#9ca3af;font-size:0.85em;"><i class="fas fa-times-circle"></i> Sin archivo</span>');
+    const verBtn = tiene
+      ? `<button onclick="verArchivo(${id}, '${period}')" style="background:#10b981;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;"><i class="fa-solid fa-eye"></i> Ver</button>`
       : '';
-
-    const curRow = document.createElement('div');
-    curRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:#eff6ff;border:2px solid #4f46e5;border-radius:10px;';
-    curRow.innerHTML = `
-      <div>
-        <span style="font-weight:600;color:#374151;">${curPeriod}
-          <span style="background:#4f46e5;color:white;padding:2px 6px;border-radius:4px;font-size:0.75rem;margin-left:8px;font-weight:normal;">Año Actual ✦</span>
+    const safeP = period.replace(/[^a-zA-Z0-9]/g, '_');
+    const onchangeAttr = isCurrentUpload
+      ? `uploadFileFromPerfil(${id}, '${period}', this, true)`
+      : isRepitienteUpload
+        ? `uploadRepitienteFromPerfil(${id}, '${period}', this)`
+        : `uploadFileFromPerfil(${id}, '${period}', this)`;
+    const uploadLabel = tiene
+      ? 'Reemplazar'
+      : (isCurrentUpload ? 'Subir Nota Actual' : isRepitienteUpload ? 'Subir Nota Repitiente' : 'Subir');
+    const uploadBtnColor = isRepitienteUpload ? '#dc2626' : '#4f46e5';
+    const fontWeight = (isCurrentUpload || isRepitienteUpload) ? '600' : '400';
+    const shownName = displayPeriod || period;
+    const hintHTML = hintText
+      ? `<small style="display:block;color:${isRepitienteUpload ? '#dc2626' : '#4f46e5'};margin-top:3px;font-size:0.78rem;font-weight:500;">${hintText}</small>`
+      : '';
+    const row = document.createElement('div');
+    row.style.cssText = `display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:${bgColor};border:${borderStyle};border-radius:10px;margin-bottom:8px;`;
+    row.innerHTML = `
+      <div style="flex:1;min-width:0;">
+        <span style="font-weight:600;color:#374151;">${shownName}
+          <span style="background:${labelColor};color:white;padding:2px 6px;border-radius:4px;font-size:0.75rem;margin-left:8px;font-weight:normal;">${labelTag}</span>
         </span><br>
-        <small>${curBadge}</small>
-        <small style="display:block;color:#6b7280;margin-top:3px;font-size:0.78rem;">Al subir esta nota, pasará a ser el año anterior y el alumno avanzará al siguiente grado.</small>
+        <small>${badge}</small>
+        ${hintHTML}
       </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        ${curVerBtn}
-        <input type="text" id="panio_${alumnoId}_${curPeriod.replace(/[^a-zA-Z0-9]/g, '_')}" data-periodo="${curPeriod}" placeholder="Año" style="width:70px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;" value="${curTiene && curNota.anio ? curNota.anio : new Date().getFullYear()}" disabled class="anio-input">
-        <input type="file" id="pfile_${alumnoId}_${curPeriod.replace(/[^a-zA-Z0-9]/g, '_')}" style="display:none;" onchange="uploadFileFromPerfil(${alumnoId}, '${curPeriod}', this, true)">
-        <button onclick="document.getElementById('pfile_${alumnoId}_${curPeriod.replace(/[^a-zA-Z0-9]/g, '_')}').click()" style="background:#4f46e5;color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;font-weight:600;">
-          <i class="fas fa-upload"></i> ${curTiene ? 'Reemplazar' : 'Subir Nota Actual'}
+      <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+        ${verBtn}
+        <input type="text" id="panio_${id}_${safeP}" data-periodo="${period}" placeholder="Año" style="width:70px;padding:4px 8px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;" value="${tiene && notaInfo.anio ? notaInfo.anio : new Date().getFullYear()}" disabled class="anio-input">
+        <input type="file" id="pfile_${id}_${safeP}" style="display:none;" onchange="${onchangeAttr}">
+        <button onclick="document.getElementById('pfile_${id}_${safeP}').click()" style="background:${uploadBtnColor};color:white;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;font-weight:${fontWeight};">
+          <i class="fas fa-upload"></i> ${uploadLabel}
         </button>
       </div>
     `;
-    notasContainer.appendChild(curRow);
+    return row;
+  }
+
+  if (isProgressive) {
+    const curPeriod = alumno.ingreso_periodo;
+    let prevPeriods = [];
+
+    if (alumno.level === 'bachillerato') {
+      const bOrder = ['6to Grado', '1er Año', '2do Año', '3er Año', '4to Año', '5to Año'];
+      if (curPeriod === '1er Año') {
+        if (notasSubidas['6to Grado']) prevPeriods.push('6to Grado');
+      } else if (curPeriod === '2do Año') {
+        if (notasSubidas['1er Año']) prevPeriods.push('1er Año');
+      } else if (curPeriod === '3er Año') {
+        if (notasSubidas['1er Año']) prevPeriods.push('1er Año');
+        if (notasSubidas['2do Año']) prevPeriods.push('2do Año');
+      } else if (curPeriod === '4to Año') {
+        if (notasSubidas['2do Año']) prevPeriods.push('2do Año');
+        if (notasSubidas['3er Año']) prevPeriods.push('3er Año');
+      } else if (curPeriod === '5to Año') {
+        if (notasSubidas['3er Año']) prevPeriods.push('3er Año');
+        if (notasSubidas['4to Año']) prevPeriods.push('4to Año');
+      }
+      // Incluir cualquier otra nota previa que exista en notasSubidas (excluyendo repitientes ya mostradas)
+      Object.keys(notasSubidas).forEach(k => {
+        if (k !== curPeriod && k !== 'Nota Final' && !prevPeriods.includes(k) && !k.endsWith(' Repitiente')) {
+          prevPeriods.push(k);
+        }
+      });
+      prevPeriods.sort((a, b) => bOrder.indexOf(a) - bOrder.indexOf(b));
+    } else {
+      // Primaria / Preescolar: solo el año anterior inmediato
+      const seqIdx2 = sequenceOfPeriodos.indexOf(alumno.ingreso_periodo);
+      const prevPeriod = seqIdx2 > 0 ? sequenceOfPeriodos[seqIdx2 - 1] : null;
+      if (prevPeriod) prevPeriods = [prevPeriod];
+    }
+
+    // 1. Renderizar notas de años anteriores
+    prevPeriods.forEach(p => {
+      notasContainer.appendChild(buildNoteRow({
+        id: alumnoId, period: p, displayPeriod: p, notaInfo: notasSubidas[p],
+        labelTag: 'Año Anterior', labelColor: '#6b7280',
+        bgColor: '#f9fafb', borderStyle: '1px solid #e5e7eb',
+        isCurrentUpload: false, isRepitienteUpload: false, hintText: ''
+      }));
+    });
+
+    // 2. Renderizar fila(s) según modo repitiente
+    if (repitienteMode) {
+      // Clave en BD: "1er Año Repitiente"; display: "Repitiente de 1er Año"
+      const repPeriodKey = curPeriod + ' Repitiente';
+      const repNota = notasSubidas[repPeriodKey];
+
+      // Fila REPITIENTE (arriba) — sube nota sin promover
+      const repRow = buildNoteRow({
+        id: alumnoId,
+        period: repPeriodKey,
+        displayPeriod: 'Repitiente de ' + curPeriod,
+        notaInfo: repNota,
+        labelTag: '↺ Repitiente',
+        labelColor: '#dc2626',
+        bgColor: '#fff5f5',
+        borderStyle: '2px solid #dc2626',
+        isCurrentUpload: false,
+        isRepitienteUpload: true,
+        hintText: `Nota del año que el alumno repitió (${curPeriod}). No genera promoción.`
+      });
+      notasContainer.appendChild(repRow);
+
+      // Separador visual
+      const sep = document.createElement('div');
+      sep.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 4px;color:#9ca3af;font-size:0.8rem;';
+      sep.innerHTML = '<div style="flex:1;height:1px;background:#e5e7eb;"></div><i class="fas fa-arrow-down"></i><span>Nota del año actual</span><div style="flex:1;height:1px;background:#e5e7eb;"></div>';
+      notasContainer.appendChild(sep);
+
+      // Fila NORMAL del año actual (abajo) — promueve
+      const curNota = notasSubidas[curPeriod];
+      let hintText = 'Al subir esta nota, el alumno avanzará al siguiente grado.';
+      if (alumno.level === 'bachillerato') {
+        if (curPeriod === '1er Año') hintText = 'Al subir esta nota, se guardará 1er Año y el alumno avanzará a 2do Año.';
+        else if (curPeriod === '2do Año') hintText = 'Al subir esta nota, se conservará la nota de 1er Año y el alumno avanzará a 3er Año.';
+        else if (curPeriod === '3er Año') hintText = 'Al subir esta nota, se eliminará la nota de 1er Año (conservando 2do Año) y el alumno avanzará a 4to Año.';
+        else if (curPeriod === '4to Año') hintText = 'Al subir esta nota, se eliminará la nota de 2do Año (conservando 3er Año) y el alumno avanzará a 5to Año.';
+        else if (curPeriod === '5to Año') hintText = 'Al subir esta nota, pasará a ser la NOTA FINAL y el estudiante pasará a ser GRADUADO.';
+      } else {
+        if (curPeriod === '6to Grado') hintText = 'Al subir esta nota, pasará a ser la nota final de primaria y el alumno pasará a ser Egresado.';
+      }
+      const curRow2 = buildNoteRow({
+        id: alumnoId,
+        period: curPeriod,
+        displayPeriod: curPeriod,
+        notaInfo: curNota,
+        labelTag: 'Año Actual ✦',
+        labelColor: '#4f46e5',
+        bgColor: '#eff6ff',
+        borderStyle: '2px solid #4f46e5',
+        isCurrentUpload: true,
+        isRepitienteUpload: false,
+        hintText: hintText
+      });
+      notasContainer.appendChild(curRow2);
+
+    } else {
+      // Modo normal: solo fila del año actual
+      const curNota = notasSubidas[curPeriod];
+      if (curNota) hasAnyNote = true;
+      let hintText = 'Al subir esta nota, pasará a ser el año anterior y el alumno avanzará al siguiente grado.';
+      if (alumno.level === 'bachillerato') {
+        if (curPeriod === '1er Año') hintText = 'Al subir esta nota, se guardará 1er Año y el alumno avanzará a 2do Año.';
+        else if (curPeriod === '2do Año') hintText = 'Al subir esta nota, se conservará la nota de 1er Año y el alumno avanzará a 3er Año.';
+        else if (curPeriod === '3er Año') hintText = 'Al subir esta nota, se eliminará la nota de 1er Año (conservando 2do Año) y el alumno avanzará a 4to Año.';
+        else if (curPeriod === '4to Año') hintText = 'Al subir esta nota, se eliminará la nota de 2do Año (conservando 3er Año) y el alumno avanzará a 5to Año.';
+        else if (curPeriod === '5to Año') hintText = 'Al subir esta nota, pasará a ser la NOTA FINAL, se limpiarán las notas anteriores y el estudiante pasará a ser GRADUADO.';
+      } else {
+        if (curPeriod === '6to Grado') hintText = 'Al subir esta nota, pasará a ser la nota final de primaria y el alumno pasará a ser Egresado.';
+      }
+      const curRow = buildNoteRow({
+        id: alumnoId, period: curPeriod, displayPeriod: curPeriod, notaInfo: curNota,
+        labelTag: 'Año Actual ✦', labelColor: '#4f46e5',
+        bgColor: '#eff6ff', borderStyle: '2px solid #4f46e5',
+        isCurrentUpload: true, isRepitienteUpload: false,
+        hintText: hintText
+      });
+      notasContainer.appendChild(curRow);
+    }
 
   } else {
     // ——— Default rendering for all other cases ———
@@ -1505,6 +1631,19 @@ async function openPerfil(alumnoId) {
         </div>
       `;
       notasContainer.appendChild(row);
+    }
+  }
+
+  // Botón Repitiente: solo visible en modo progresivo
+  const btnRep = document.getElementById('btnRepitiente');
+  if (btnRep) {
+    btnRep.style.display = isProgressive ? 'flex' : 'none';
+    if (repitienteMode) {
+      btnRep.style.background = '#7f1d1d';
+      btnRep.innerHTML = '<i class="fas fa-times"></i> Cancelar Repitiente';
+    } else {
+      btnRep.style.background = '#ef4444';
+      btnRep.innerHTML = '<i class="fas fa-redo"></i> Repitiente';
     }
   }
 
@@ -1554,6 +1693,81 @@ async function toggleEditAnios() {
   }
 }
 
+// ============ REPITIENTE ============
+async function toggleRepitiente() {
+  if (!perfilAlumnoActual) return;
+
+  if (repitienteMode) {
+    // Cancelar modo repitiente
+    // Si ya hay una nota repitiente guardada, preguntar si eliminarla
+    const curPeriod = perfilAlumnoActual.ingreso_periodo;
+    const repPeriodKey = curPeriod + ' Repitiente';
+    const notasRes = await eel.get_notas(perfilAlumnoActual.id)();
+    const notasSubidas = notasRes.success ? notasRes.notas : {};
+
+    if (notasSubidas[repPeriodKey]) {
+      const ok = confirm(
+        `¿Cancelar el modo repitiente?\n\n` +
+        `Ya tienes una nota guardada como "Repitiente de ${curPeriod}".\n` +
+        `Si cancelas, esa nota se eliminará permanentemente.\n\n` +
+        `¿Deseas continuar?`
+      );
+      if (!ok) return;
+      // Eliminar nota repitiente del backend
+      await eel.delete_nota(perfilAlumnoActual.id, repPeriodKey)();
+    }
+
+    repitienteMode = false;
+    openPerfil(perfilAlumnoActual.id);
+  } else {
+    // Activar modo repitiente
+    repitienteMode = true;
+    openPerfil(perfilAlumnoActual.id);
+  }
+}
+
+async function uploadRepitienteFromPerfil(alumnoId, repPeriodKey, inputEl) {
+  // repPeriodKey almacenado como "1er Año Repitiente" etc.
+  const file = inputEl.files[0];
+  if (!file) return;
+
+  // Nombre de display: "Repitiente de 1er Año"
+  const displayName = repPeriodKey.replace(/ Repitiente$/, '');
+
+  const confirmed = confirm(
+    `¿Confirmar subida de la nota "Repitiente de ${displayName}"?\n\n` +
+    `• Esta nota quedará guardada como el año que repitió el alumno.\n` +
+    `• El alumno NO avanzará de año.\n` +
+    `• Podrás ver esta nota en el perfil mientras esté en modo repitiente.`
+  );
+  if (!confirmed) { inputEl.value = ''; return; }
+
+  const anioInputId = `panio_${alumnoId}_${repPeriodKey.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  const anioInput = document.getElementById(anioInputId);
+  const anio = anioInput ? anioInput.value.trim() : new Date().getFullYear().toString();
+
+  const reader = new FileReader();
+  reader.onload = async function() {
+    const base64 = reader.result;
+    // Buscar el botón de subir de este input
+    const parentDiv = inputEl.parentElement;
+    const uploadBtn = parentDiv ? Array.from(parentDiv.querySelectorAll('button')).find(b => b.type !== 'button' || b.onclick) || parentDiv.querySelector('button:last-child') : null;
+    if (uploadBtn) uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    // upload_nota detecta " Repitiente" y NO dispara promoción
+    const res = await eel.upload_nota(alumnoId, repPeriodKey, base64, file.name, anio)();
+    if (res.success) {
+      const updated = await eel.get_alumnos(null)();
+      students = updated;
+      const freshAlumno = students.find(s => s.id === alumnoId);
+      if (freshAlumno) perfilAlumnoActual = freshAlumno;
+      openPerfil(alumnoId);
+    } else {
+      alert('Error subiendo el archivo: ' + res.error);
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
 async function deleteFromProfile() {
   if (!perfilAlumnoActual) return;
   if (!confirm('¿Eliminar a ' + perfilAlumnoActual.nombre + ' ' + perfilAlumnoActual.apellido + ' y todos sus archivos?')) return;
@@ -1571,13 +1785,23 @@ async function uploadFileFromPerfil(alumnoId, periodo, inputEl, isCurrentYear = 
   if (!file) return;
 
   if (isCurrentYear) {
-    const confirmed = confirm(
-      `¿Confirmar subida de nota para "${periodo}"?\n\n` +
-      `Al confirmar:\n` +
-      `• Esta nota pasará a ser la nota del año anterior.\n` +
-      `• La nota anterior se eliminará automáticamente.\n` +
-      `• El alumno avanzará al siguiente grado.`
-    );
+    let confirmMsg = `¿Confirmar subida de nota para "${periodo}"?\n\n`;
+    if (periodo === '1er Año') {
+      confirmMsg += `• Se guardará la nota de 1er Año.\n• El alumno avanzará a 2do Año.`;
+    } else if (periodo === '2do Año') {
+      confirmMsg += `• Se guardará la nota de 2do Año (conservando la de 1er Año).\n• El alumno avanzará a 3er Año.`;
+    } else if (periodo === '3er Año') {
+      confirmMsg += `• Se guardará la nota de 3er Año.\n• Se eliminará automáticamente la nota de 1er Año.\n• El alumno avanzará a 4to Año.`;
+    } else if (periodo === '4to Año') {
+      confirmMsg += `• Se guardará la nota de 4to Año.\n• Se eliminará automáticamente la nota de 2do Año.\n• El alumno avanzará a 5to Año.`;
+    } else if (periodo === '5to Año') {
+      confirmMsg += `• Esta nota pasará a ser la NOTA FINAL.\n• Se eliminarán las notas de años anteriores.\n• El estudiante pasará a ser GRADUADO (Egresado).`;
+    } else if (periodo === '6to Grado') {
+      confirmMsg += `• Esta nota pasará a ser la nota final de primaria.\n• Se eliminará la nota anterior (5to Grado).\n• El alumno pasará al estado de EGRESADO.`;
+    } else {
+      confirmMsg += `• Esta nota pasará a ser la nota del año anterior.\n• La nota anterior se eliminará automáticamente.\n• El alumno avanzará al siguiente grado.`;
+    }
+    const confirmed = confirm(confirmMsg);
     if (!confirmed) return;
   }
 
